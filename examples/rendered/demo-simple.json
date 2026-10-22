@@ -1,0 +1,179 @@
+{
+  "disclaimer": "API list-price equivalent. Not what a subscription plan bills.",
+  "generated_at": "2026-01-06T12:00:00Z",
+  "privacy": "public",
+  "receipts": [
+    {
+      "environmental_scenarios": {
+        "caveat": "Illustrative scenarios, not measurements",
+        "levels": {
+          "central": {
+            "kg_co2e": 0.00027150199999999996,
+            "kwh": 0.000946,
+            "litres": 0.0031409479435355178
+          },
+          "high": {
+            "kg_co2e": 0.00170175,
+            "kwh": 0.0034035,
+            "litres": 0.018038549999999997
+          },
+          "low": {
+            "kg_co2e": 2.6975000000000002e-05,
+            "kwh": 0.00021580000000000001,
+            "litres": 0.00044886400000000004
+          }
+        },
+        "note": "None measured, not bounds.",
+        "source_keys": [
+          "GOOGLE",
+          "EPOCH",
+          "JEGHAM"
+        ],
+        "unit": {
+          "kg_co2e": "kg CO2e",
+          "kwh": "kWh",
+          "litres": "litres"
+        }
+      },
+      "kind": "session",
+      "label": "one session (session #6a9871)",
+      "models": [
+        {
+          "cache_read": 2500,
+          "cache_write": 1000,
+          "cost_usd": 0.00747,
+          "input": 110,
+          "missing": false,
+          "name": "claude-sonnet-5-5",
+          "output": 450,
+          "price_check": "ok",
+          "price_detail": null,
+          "reasoning": null
+        },
+        {
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost_usd": 0.00019999999999999998,
+          "input": 1000,
+          "missing": false,
+          "name": "claude-haiku-5-5",
+          "output": 200,
+          "price_check": "ok",
+          "price_detail": null,
+          "reasoning": null
+        },
+        {
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 300,
+          "missing": true,
+          "name": "mystery-model-9",
+          "output": 30,
+          "price_check": "unverified",
+          "price_detail": null,
+          "reasoning": null
+        }
+      ],
+      "pricing_provenance": {
+        "as_of": "2026-10-21",
+        "checked": "2026-10-21",
+        "overrides_sha256": "56f81781c8e4c6c4edd3b3006677e01c285f05747d69687b0b54ab84d2260205",
+        "source": "OpenRouter list"
+      },
+      "provisional": false,
+      "session_ref": "session #6a9871",
+      "source": "claude",
+      "tool_version": "ccusage 20.0.38",
+      "totals": {
+        "cache_read": 2500,
+        "cache_write": 1000,
+        "cost_usd": 0.00767,
+        "input": 1410,
+        "output": 680,
+        "partial": true,
+        "total_tokens": 5590
+      },
+      "tz": "UTC",
+      "unpriced": [
+        "mystery-model-9"
+      ],
+      "window_end": "2026-01-05T10:03:00.000Z",
+      "window_start": "2026-01-05T10:00:00.000Z"
+    },
+    {
+      "environmental_scenarios": {
+        "caveat": "Illustrative scenarios, not measurements",
+        "levels": {
+          "central": {
+            "kg_co2e": 0.00015182299999999999,
+            "kwh": 0.000529,
+            "litres": 0.001756407465254005
+          },
+          "high": {
+            "kg_co2e": 0.001015,
+            "kwh": 0.00203,
+            "litres": 0.010759
+          },
+          "low": {
+            "kg_co2e": 1.48375e-05,
+            "kwh": 0.0001187,
+            "litres": 0.00024689600000000003
+          }
+        },
+        "note": "None measured, not bounds.",
+        "source_keys": [
+          "GOOGLE",
+          "EPOCH",
+          "JEGHAM"
+        ],
+        "unit": {
+          "kg_co2e": "kg CO2e",
+          "kwh": "kWh",
+          "litres": "litres"
+        }
+      },
+      "kind": "session",
+      "label": "one session (session #d000f7)",
+      "models": [
+        {
+          "cache_read": 1900,
+          "cache_write": 0,
+          "cost_usd": 0.0056125,
+          "input": 1100,
+          "missing": false,
+          "name": "gpt-5",
+          "output": 400,
+          "price_check": "unverified",
+          "price_detail": null,
+          "reasoning": 130
+        }
+      ],
+      "pricing_provenance": {
+        "as_of": "2026-10-21",
+        "checked": "2026-10-21",
+        "overrides_sha256": "56f81781c8e4c6c4edd3b3006677e01c285f05747d69687b0b54ab84d2260205",
+        "source": "OpenRouter list"
+      },
+      "provisional": false,
+      "session_ref": "session #d000f7",
+      "source": "codex",
+      "tool_version": "ccusage 20.0.38",
+      "totals": {
+        "cache_read": 1900,
+        "cache_write": 0,
+        "cost_usd": 0.0056125,
+        "input": 1100,
+        "output": 400,
+        "partial": false,
+        "reasoning": 130,
+        "total_tokens": 3400
+      },
+      "tz": "UTC",
+      "unpriced": [],
+      "window_end": "2026-01-05T12:00:10.000Z",
+      "window_start": "2026-01-05T12:00:10.000Z"
+    }
+  ],
+  "schema": "session-receipt/1"
+}

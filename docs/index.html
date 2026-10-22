@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Receipt: see what an AI coding session used</title>
+<meta name="description" content="A local command-line tool that turns Claude Code (and, experimentally, Codex) usage logs into a nutrition-label style receipt.">
+<style>
+  :root { --ink: #111; --muted: #4a4a4a; --line: #111; --bg: #fafaf7; --card: #fff; --accent: #0b5cad; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 17px/1.55 -apple-system, "Segoe UI", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .skip { position: absolute; left: -999px; }
+  .skip:focus { left: 1rem; top: 1rem; background: #fff; padding: .4rem .7rem; z-index: 1; }
+  header, main, footer { max-width: 62rem; margin: 0 auto; padding: 0 1.25rem; }
+  header { padding-top: 2.5rem; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; margin: 0 0 .4rem; letter-spacing: -.01em; }
+  .tagline { font-size: 1.2rem; color: var(--muted); margin: 0 0 1.5rem; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 2rem; align-items: start; }
+  .hero figure { margin: 0; }
+  .hero img { width: 100%; height: auto; border: 1px solid #ccc; background: #fff; }
+  figcaption { font-size: .9rem; color: var(--muted); margin-top: .4rem; }
+  .buttons { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1.2rem 0; }
+  .button { display: inline-block; padding: .55rem 1rem; border: 2px solid var(--ink); background: var(--card);
+            color: var(--ink); text-decoration: none; font-weight: 600; }
+  .button.primary { background: var(--ink); color: #fff; }
+  h2 { font-size: 1.45rem; border-top: 6px solid var(--line); padding-top: .6rem; margin: 2.6rem 0 .8rem; }
+  h3 { font-size: 1.05rem; margin: 1.2rem 0 .3rem; }
+  pre { background: #1b1b1b; color: #f2f2f2; padding: 1rem; overflow-x: auto; font-size: .9rem; line-height: 1.45; }
+  code { font-family: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+  p code, li code, td code { background: #ececec; padding: .05rem .3rem; }
+  table { border-collapse: collapse; width: 100%; background: var(--card); }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #ccc; vertical-align: top; }
+  th { border-bottom: 2px solid var(--ink); }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2rem; }
+  .note { border-left: 5px solid var(--ink); background: var(--card); padding: .7rem 1rem; }
+  footer { margin-top: 3rem; padding-bottom: 3rem; color: var(--muted); font-size: .95rem; border-top: 1px solid #ccc; padding-top: 1rem; }
+  @media (max-width: 760px) { .hero, .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header>
+  <h1>Session Receipt</h1>
+  <p class="tagline">See what this work used, what's included, and where the numbers came from.</p>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="what">
+    <div>
+      <h2 id="what" style="border-top:0;margin-top:0;padding-top:0">What it is</h2>
+      <p>A local command-line tool that reads your <strong>Claude Code</strong> usage logs (and,
+        experimentally, <strong>Codex</strong> logs) and prints a nutrition-label style receipt for one
+        session or one day: the tokens recorded, an <strong>API list-price equivalent</strong> cost,
+        and exactly which sources and prices produced each number.</p>
+      <p>Accounting is plain deterministic code. No model calls, no account, no upload, no
+        telemetry. Making a receipt never touches the network.</p>
+      <div class="buttons">
+        <a class="button primary" href="https://github.com/parttimediarybehavior/session-receipt">Source and install</a>
+        <a class="button" href="examples/claude-session.html">Open the example receipt</a>
+      </div>
+      <p class="note">Every receipt on this page is built from <strong>synthetic</strong> fixtures:
+        fake projects, fake prompts, made-up usage. No one's real logs are shown.</p>
+    </div>
+    <figure>
+      <img src="preview.png" width="600" height="591"
+           alt="Example receipt. Recorded usage: claude-sonnet-5-5 450 output, 110 fresh input, 1,000 cache writes, 2,500 cache reads; claude-haiku-5-5 200 output, 1,000 fresh input; mystery-model-9 30 output, 300 fresh input. Estimated cost: sonnet $0.0075, haiku $0.0002, mystery-model-9 unknown. Subtotal $0.0077, partial: excludes 1 unpriced model.">
+      <figcaption>A synthetic Claude Code session, rendered by the tool. One model has no known price, so the total is marked partial instead of counting it as $0.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="examples">
+    <h2 id="examples">Example outputs</h2>
+    <p>Each receipt comes in three formats: a self-contained HTML page, an SVG label, and JSON for scripts.</p>
+    <table>
+      <caption class="skip">Example receipts and their formats</caption>
+      <thead><tr><th scope="col">Example</th><th scope="col">Formats</th></tr></thead>
+      <tbody>
+        <tr><td>Claude Code session (the default receipt)</td>
+            <td><a href="examples/claude-session.html">HTML</a> · <a href="examples/claude-session.svg">SVG</a> · <a href="examples/claude-session.json">JSON</a></td></tr>
+        <tr><td>Codex session (experimental support)</td>
+            <td><a href="examples/codex-session.html">HTML</a> · <a href="examples/codex-session.svg">SVG</a> · <a href="examples/codex-session.json">JSON</a></td></tr>
+        <tr><td>Claude Code session with the optional <code>--env</code> scenarios (illustrative only, see below)</td>
+            <td><a href="examples/claude-session-with-scenarios.html">HTML</a> · <a href="examples/claude-session-with-scenarios.svg">SVG</a> · <a href="examples/claude-session-with-scenarios.json">JSON</a></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section aria-labelledby="read">
+    <h2 id="read">How to read the numbers</h2>
+    <div class="grid2">
+      <div>
+        <h3>API-equivalent cost, not your bill</h3>
+        <p>The cost line is what the recorded tokens would cost at public API list prices. If you use a
+          subscription plan, that is not what you are charged.</p>
+        <h3>Prices are a dated snapshot</h3>
+        <p>Prices come from a saved copy of OpenRouter's public model list, and every receipt prints the
+          date of that copy. Refresh it whenever you like with <code>session-receipt update-prices</code>;
+          that is the only command that uses the network.</p>
+      </div>
+      <div>
+        <h3>Unknown stays unknown</h3>
+        <p>If a model has no known price, its cost shows as <em>unknown</em> and the total is marked
+          <em>partial</em>. It is never counted as $0.</p>
+        <h3>Claude Code first, Codex experimental</h3>
+        <p>Claude Code logs are the main target. Codex support is experimental: its prices are not
+          checked against the snapshot, and token counts from different providers are not comparable.</p>
+      </div>
+    </div>
+    <h3>Environmental scenarios are optional and illustrative</h3>
+    <p>With <code>--env</code>, a receipt adds low/central/high energy, water and carbon scenarios built
+      from published estimates. They are not measurements and not bounds, and they are off by default.</p>
+  </section>
+
+  <section aria-labelledby="try">
+    <h2 id="try">Try it</h2>
+    <p>Install from source (no wheel is published), then render the synthetic demo:</p>
+<pre><code>git clone https://github.com/parttimediarybehavior/session-receipt.git
+cd session-receipt
+npm ci --prefix vendor          # pinned ccusage 20.0.38 (MIT)
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -e .
+.venv/bin/session-receipt demo --out /tmp/sr_demo --now 2026-01-06T12:00:00Z</code></pre>
+    <p>Then, on your own machine, <code>.venv/bin/session-receipt session --latest</code> for your most recent
+      session. Python 3.10+ and Node.js are required; only Linux x64 has been tested. Your logs are
+      only read, never modified, and nothing leaves your computer.</p>
+  </section>
+</main>
+
+<footer>
+  <p>Token counts come from <a href="https://github.com/ryoppippi/ccusage">ccusage</a> by ryoppippi
+    (MIT), run locally as a pinned dependency. Prices: <a href="https://openrouter.ai/models">OpenRouter's public model list</a>, as of the date on each receipt.</p>
+  <p>Session Receipt is MIT licensed, © 2026 mothwake. Not affiliated with Anthropic, OpenAI or OpenRouter.</p>
+</footer>
+</body>
+</html>

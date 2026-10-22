@@ -1,0 +1,50 @@
+{
+  "disclaimer": "API list-price equivalent. Not what a subscription plan bills.",
+  "generated_at": "2026-01-06T12:00:00Z",
+  "privacy": "public",
+  "receipts": [
+    {
+      "kind": "session",
+      "label": "one session (session #d000f7)",
+      "models": [
+        {
+          "cache_read": 1900,
+          "cache_write": 0,
+          "cost_usd": 0.0056125,
+          "input": 1100,
+          "missing": false,
+          "name": "gpt-5",
+          "output": 400,
+          "price_check": "unverified",
+          "price_detail": null,
+          "reasoning": 130
+        }
+      ],
+      "pricing_provenance": {
+        "as_of": "2026-10-21",
+        "checked": "2026-10-21",
+        "overrides_sha256": "56f81781c8e4c6c4edd3b3006677e01c285f05747d69687b0b54ab84d2260205",
+        "source": "OpenRouter list"
+      },
+      "provisional": false,
+      "session_ref": "session #d000f7",
+      "source": "codex",
+      "tool_version": "ccusage 20.0.38",
+      "totals": {
+        "cache_read": 1900,
+        "cache_write": 0,
+        "cost_usd": 0.0056125,
+        "input": 1100,
+        "output": 400,
+        "partial": false,
+        "reasoning": 130,
+        "total_tokens": 3400
+      },
+      "tz": "UTC",
+      "unpriced": [],
+      "window_end": "2026-01-05T12:00:10.000Z",
+      "window_start": "2026-01-05T12:00:10.000Z"
+    }
+  ],
+  "schema": "session-receipt/1"
+}

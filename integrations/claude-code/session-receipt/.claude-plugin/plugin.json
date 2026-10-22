@@ -1,0 +1,7 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "session-receipt",
+  "version": "0.1.0",
+  "description": "On-demand usage receipts for Claude Code sessions (tokens, API-equivalent cost, optional environmental scenarios). Deterministic local code; no model calls.",
+  "author": { "name": "Session Receipt contributors" }
+}

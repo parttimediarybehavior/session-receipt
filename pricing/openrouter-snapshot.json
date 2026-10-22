@@ -1,0 +1,691 @@
+{
+ "as_of": "2026-10-21",
+ "checked": "2026-10-21",
+ "fetched_at": "2026-10-21T21:09:56Z",
+ "models": {
+  "anthropic/claude-fable-5": {
+   "completion": "0.00005",
+   "input_cache_read": "0.000001",
+   "input_cache_write": "0.0000125",
+   "input_cache_write_1h": "0.00002",
+   "prompt": "0.00001",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-fable-5.1": {
+   "completion": "0.00005",
+   "input_cache_read": "0.00000025",
+   "input_cache_write": "0.0000125",
+   "input_cache_write_1h": "0.00002",
+   "prompt": "0.00001",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-haiku-4.5": {
+   "completion": "0.000005",
+   "input_cache_read": "0.0000001",
+   "input_cache_write": "0.00000125",
+   "input_cache_write_1h": "0.000002",
+   "prompt": "0.000001",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-haiku-5.5": {
+   "completion": "0.0000005",
+   "input_cache_read": "0.00000001",
+   "input_cache_write": "0.000000125",
+   "input_cache_write_1h": "0.0000002",
+   "overrides": [
+    {
+     "completion": "0.0000025",
+     "input_cache_read": "0.00000005",
+     "input_cache_write": "0.000000625",
+     "input_cache_write_1h": "0.000001",
+     "min_prompt_tokens": 100000,
+     "prompt": "0.0000005"
+    }
+   ],
+   "prompt": "0.0000001",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-opus-4.1": {
+   "completion": "0.000075",
+   "input_cache_read": "0.0000015",
+   "input_cache_write": "0.00001875",
+   "input_cache_write_1h": "0.00003",
+   "prompt": "0.000015",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-opus-4.5": {
+   "completion": "0.000025",
+   "input_cache_read": "0.0000005",
+   "input_cache_write": "0.00000625",
+   "input_cache_write_1h": "0.00001",
+   "prompt": "0.000005",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-opus-4.6": {
+   "completion": "0.000025",
+   "input_cache_read": "0.0000005",
+   "input_cache_write": "0.00000625",
+   "input_cache_write_1h": "0.00001",
+   "prompt": "0.000005",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-opus-4.7": {
+   "completion": "0.000025",
+   "input_cache_read": "0.0000005",
+   "input_cache_write": "0.00000625",
+   "input_cache_write_1h": "0.00001",
+   "prompt": "0.000005",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-opus-4.8": {
+   "completion": "0.000025",
+   "input_cache_read": "0.0000005",
+   "input_cache_write": "0.00000625",
+   "input_cache_write_1h": "0.00001",
+   "prompt": "0.000005",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-opus-5": {
+   "completion": "0.000025",
+   "input_cache_read": "0.0000005",
+   "input_cache_write": "0.00000625",
+   "input_cache_write_1h": "0.00001",
+   "prompt": "0.000005",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-opus-5.5": {
+   "completion": "0.00002",
+   "input_cache_read": "0.0000002",
+   "input_cache_write": "0.000005",
+   "input_cache_write_1h": "0.000008",
+   "prompt": "0.000004",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-sonnet-4.5": {
+   "completion": "0.000015",
+   "input_cache_read": "0.0000003",
+   "input_cache_write": "0.00000375",
+   "input_cache_write_1h": "0.000006",
+   "overrides": [
+    {
+     "completion": "0.0000225",
+     "input_cache_read": "0.0000006",
+     "input_cache_write": "0.0000075",
+     "input_cache_write_1h": "0.000012",
+     "min_prompt_tokens": 200000,
+     "prompt": "0.000006"
+    }
+   ],
+   "prompt": "0.000003",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-sonnet-4.6": {
+   "completion": "0.000015",
+   "input_cache_read": "0.0000003",
+   "input_cache_write": "0.00000375",
+   "input_cache_write_1h": "0.000006",
+   "prompt": "0.000003",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-sonnet-5": {
+   "completion": "0.00001",
+   "input_cache_read": "0.0000002",
+   "input_cache_write": "0.0000025",
+   "input_cache_write_1h": "0.000004",
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "anthropic/claude-sonnet-5.5": {
+   "completion": "0.00001",
+   "input_cache_read": "0.0000001",
+   "input_cache_write": "0.0000025",
+   "input_cache_write_1h": "0.000004",
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-3.5-turbo": {
+   "completion": "0.0000015",
+   "prompt": "0.0000005"
+  },
+  "openai/gpt-3.5-turbo-0613": {
+   "completion": "0.000002",
+   "prompt": "0.000001"
+  },
+  "openai/gpt-3.5-turbo-16k": {
+   "completion": "0.000004",
+   "prompt": "0.000003"
+  },
+  "openai/gpt-3.5-turbo-instruct": {
+   "completion": "0.000002",
+   "prompt": "0.0000015"
+  },
+  "openai/gpt-4": {
+   "completion": "0.00006",
+   "prompt": "0.00003"
+  },
+  "openai/gpt-4-turbo": {
+   "completion": "0.00003",
+   "prompt": "0.00001"
+  },
+  "openai/gpt-4.1": {
+   "completion": "0.000008",
+   "input_cache_read": "0.0000005",
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-4.1-mini": {
+   "completion": "0.0000016",
+   "input_cache_read": "0.0000001",
+   "prompt": "0.0000004",
+   "web_search": "0.01"
+  },
+  "openai/gpt-4.1-nano": {
+   "completion": "0.0000004",
+   "input_cache_read": "0.000000025",
+   "prompt": "0.0000001",
+   "web_search": "0.01"
+  },
+  "openai/gpt-4o": {
+   "completion": "0.00001",
+   "input_cache_read": "0.00000125",
+   "prompt": "0.0000025"
+  },
+  "openai/gpt-4o-2024-05-13": {
+   "completion": "0.000015",
+   "prompt": "0.000005"
+  },
+  "openai/gpt-4o-2024-08-06": {
+   "completion": "0.00001",
+   "input_cache_read": "0.00000125",
+   "prompt": "0.0000025"
+  },
+  "openai/gpt-4o-2024-11-20": {
+   "completion": "0.00001",
+   "input_cache_read": "0.00000125",
+   "prompt": "0.0000025"
+  },
+  "openai/gpt-4o-mini": {
+   "completion": "0.0000006",
+   "input_cache_read": "0.000000075",
+   "prompt": "0.00000015"
+  },
+  "openai/gpt-4o-mini-2024-07-18": {
+   "completion": "0.0000006",
+   "input_cache_read": "0.000000075",
+   "prompt": "0.00000015"
+  },
+  "openai/gpt-5": {
+   "completion": "0.00001",
+   "input_cache_read": "0.000000125",
+   "prompt": "0.00000125",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5-image": {
+   "completion": "0.00001",
+   "image_output": "0.00004",
+   "input_cache_read": "0.00000125",
+   "prompt": "0.00001",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5-image-mini": {
+   "completion": "0.000002",
+   "image_output": "0.000008",
+   "input_cache_read": "0.00000025",
+   "prompt": "0.0000025",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5-mini": {
+   "completion": "0.000002",
+   "input_cache_read": "0.000000025",
+   "prompt": "0.00000025",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5-nano": {
+   "completion": "0.0000004",
+   "input_cache_read": "0.000000005",
+   "prompt": "0.00000005",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5-pro": {
+   "completion": "0.00012",
+   "prompt": "0.000015",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.1": {
+   "completion": "0.00001",
+   "input_cache_read": "0.000000125",
+   "prompt": "0.00000125",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.1-codex": {
+   "completion": "0.00001",
+   "input_cache_read": "0.00000013",
+   "prompt": "0.00000125",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.1-codex-max": {
+   "completion": "0.00001",
+   "input_cache_read": "0.000000125",
+   "prompt": "0.00000125",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.1-codex-mini": {
+   "completion": "0.000002",
+   "input_cache_read": "0.00000003",
+   "prompt": "0.00000025",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.2": {
+   "completion": "0.000014",
+   "input_cache_read": "0.000000175",
+   "prompt": "0.00000175",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.2-chat": {
+   "completion": "0.000014",
+   "input_cache_read": "0.000000175",
+   "prompt": "0.00000175",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.2-codex": {
+   "completion": "0.000014",
+   "input_cache_read": "0.000000175",
+   "prompt": "0.00000175",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.2-pro": {
+   "completion": "0.000168",
+   "prompt": "0.000021",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.3-codex": {
+   "completion": "0.000014",
+   "input_cache_read": "0.000000175",
+   "prompt": "0.00000175",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.4": {
+   "completion": "0.000015",
+   "input_cache_read": "0.00000025",
+   "overrides": [
+    {
+     "completion": "0.0000225",
+     "input_cache_read": "0.0000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000005"
+    }
+   ],
+   "prompt": "0.0000025",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.4-image-2": {
+   "completion": "0.000015",
+   "image_output": "0.00003",
+   "input_cache_read": "0.000002",
+   "prompt": "0.000008",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.4-mini": {
+   "completion": "0.0000045",
+   "input_cache_read": "0.000000075",
+   "prompt": "0.00000075",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.4-nano": {
+   "completion": "0.00000125",
+   "input_cache_read": "0.00000002",
+   "prompt": "0.0000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.4-pro": {
+   "completion": "0.00018",
+   "overrides": [
+    {
+     "completion": "0.00027",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.00006"
+    }
+   ],
+   "prompt": "0.00003",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.5": {
+   "completion": "0.00003",
+   "input_cache_read": "0.0000005",
+   "overrides": [
+    {
+     "completion": "0.000045",
+     "input_cache_read": "0.000001",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.00001"
+    }
+   ],
+   "prompt": "0.000005",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.5-pro": {
+   "completion": "0.00018",
+   "overrides": [
+    {
+     "completion": "0.00027",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.00006"
+    }
+   ],
+   "prompt": "0.00003",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.6-luna": {
+   "completion": "0.0000012",
+   "input_cache_read": "0.00000002",
+   "input_cache_write": "0.00000025",
+   "overrides": [
+    {
+     "completion": "0.0000018",
+     "input_cache_read": "0.00000004",
+     "input_cache_write": "0.0000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.0000004"
+    }
+   ],
+   "prompt": "0.0000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.6-luna-pro": {
+   "completion": "0.0000012",
+   "input_cache_read": "0.00000002",
+   "input_cache_write": "0.00000025",
+   "overrides": [
+    {
+     "completion": "0.0000018",
+     "input_cache_read": "0.00000004",
+     "input_cache_write": "0.0000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.0000004"
+    }
+   ],
+   "prompt": "0.0000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.6-sol": {
+   "completion": "0.00002",
+   "input_cache_read": "0.0000004",
+   "input_cache_write": "0.000005",
+   "overrides": [
+    {
+     "completion": "0.00003",
+     "input_cache_read": "0.0000008",
+     "input_cache_write": "0.00001",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000008"
+    }
+   ],
+   "prompt": "0.000004",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.6-sol-pro": {
+   "completion": "0.00002",
+   "input_cache_read": "0.0000004",
+   "input_cache_write": "0.000005",
+   "overrides": [
+    {
+     "completion": "0.00003",
+     "input_cache_read": "0.0000008",
+     "input_cache_write": "0.00001",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000008"
+    }
+   ],
+   "prompt": "0.000004",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.6-terra": {
+   "completion": "0.000012",
+   "input_cache_read": "0.0000002",
+   "input_cache_write": "0.0000025",
+   "overrides": [
+    {
+     "completion": "0.000018",
+     "input_cache_read": "0.0000004",
+     "input_cache_write": "0.000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000004"
+    }
+   ],
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-5.6-terra-pro": {
+   "completion": "0.000012",
+   "input_cache_read": "0.0000002",
+   "input_cache_write": "0.0000025",
+   "overrides": [
+    {
+     "completion": "0.000018",
+     "input_cache_read": "0.0000004",
+     "input_cache_write": "0.000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000004"
+    }
+   ],
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6-astra": {
+   "completion": "0.00005",
+   "input_cache_read": "0.000001",
+   "input_cache_write": "0.0000125",
+   "overrides": [
+    {
+     "completion": "0.000075",
+     "input_cache_read": "0.000002",
+     "input_cache_write": "0.000025",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.00002"
+    }
+   ],
+   "prompt": "0.00001",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6-astra-pro": {
+   "completion": "0.00005",
+   "input_cache_read": "0.000001",
+   "input_cache_write": "0.0000125",
+   "overrides": [
+    {
+     "completion": "0.000075",
+     "input_cache_read": "0.000002",
+     "input_cache_write": "0.000025",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.00002"
+    }
+   ],
+   "prompt": "0.00001",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6-luna": {
+   "completion": "0.0000005",
+   "input_cache_read": "0.00000001",
+   "input_cache_write": "0.000000125",
+   "overrides": [
+    {
+     "completion": "0.00000075",
+     "input_cache_read": "0.00000002",
+     "input_cache_write": "0.00000025",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.0000002"
+    }
+   ],
+   "prompt": "0.0000001",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6-luna-pro": {
+   "completion": "0.0000005",
+   "input_cache_read": "0.00000001",
+   "input_cache_write": "0.000000125",
+   "overrides": [
+    {
+     "completion": "0.00000075",
+     "input_cache_read": "0.00000002",
+     "input_cache_write": "0.00000025",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.0000002"
+    }
+   ],
+   "prompt": "0.0000001",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6-sol": {
+   "completion": "0.00001",
+   "input_cache_read": "0.0000002",
+   "input_cache_write": "0.0000025",
+   "overrides": [
+    {
+     "completion": "0.000015",
+     "input_cache_read": "0.0000004",
+     "input_cache_write": "0.000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000004"
+    }
+   ],
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6-sol-pro": {
+   "completion": "0.00001",
+   "input_cache_read": "0.0000002",
+   "input_cache_write": "0.0000025",
+   "overrides": [
+    {
+     "completion": "0.000015",
+     "input_cache_read": "0.0000004",
+     "input_cache_write": "0.000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000004"
+    }
+   ],
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6.1-sol": {
+   "completion": "0.00001",
+   "input_cache_read": "0.0000001",
+   "input_cache_write": "0.0000025",
+   "overrides": [
+    {
+     "completion": "0.000015",
+     "input_cache_read": "0.0000002",
+     "input_cache_write": "0.000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000004"
+    }
+   ],
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-6.1-sol-pro": {
+   "completion": "0.00001",
+   "input_cache_read": "0.0000001",
+   "input_cache_write": "0.0000025",
+   "overrides": [
+    {
+     "completion": "0.000015",
+     "input_cache_read": "0.0000002",
+     "input_cache_write": "0.000005",
+     "min_prompt_tokens": 272000,
+     "prompt": "0.000004"
+    }
+   ],
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/gpt-audio": {
+   "audio": "0.000032",
+   "audio_output": "0.000064",
+   "completion": "0.00001",
+   "prompt": "0.0000025"
+  },
+  "openai/gpt-audio-mini": {
+   "audio": "0.0000006",
+   "audio_output": "0.0000024",
+   "completion": "0.0000024",
+   "prompt": "0.0000006"
+  },
+  "openai/gpt-chat-latest": {
+   "completion": "0.00003",
+   "input_cache_read": "0.0000005",
+   "prompt": "0.000005",
+   "web_search": "0.01"
+  },
+  "openai/gpt-oss-120b": {
+   "completion": "0.0000006",
+   "input_cache_read": "0.000000075",
+   "prompt": "0.00000015"
+  },
+  "openai/gpt-oss-20b": {
+   "completion": "0.00000009",
+   "input_cache_read": "0.000000009",
+   "prompt": "0.000000018"
+  },
+  "openai/gpt-oss-safeguard-20b": {
+   "completion": "0.0000003",
+   "input_cache_read": "0.0000000375",
+   "prompt": "0.000000075"
+  },
+  "openai/o1": {
+   "completion": "0.00006",
+   "input_cache_read": "0.0000075",
+   "prompt": "0.000015",
+   "web_search": "0.01"
+  },
+  "openai/o1-pro": {
+   "completion": "0.0006",
+   "prompt": "0.00015",
+   "web_search": "0.01"
+  },
+  "openai/o3": {
+   "completion": "0.000008",
+   "input_cache_read": "0.0000005",
+   "prompt": "0.000002",
+   "web_search": "0.01"
+  },
+  "openai/o3-mini": {
+   "completion": "0.0000044",
+   "input_cache_read": "0.00000055",
+   "prompt": "0.0000011",
+   "web_search": "0.01"
+  },
+  "openai/o3-mini-high": {
+   "completion": "0.0000044",
+   "input_cache_read": "0.00000055",
+   "prompt": "0.0000011",
+   "web_search": "0.01"
+  },
+  "openai/o3-pro": {
+   "completion": "0.00008",
+   "prompt": "0.00002",
+   "web_search": "0.01"
+  },
+  "openai/o4-mini": {
+   "completion": "0.0000044",
+   "input_cache_read": "0.000000275",
+   "prompt": "0.0000011",
+   "web_search": "0.01"
+  },
+  "openai/o4-mini-high": {
+   "completion": "0.0000044",
+   "input_cache_read": "0.000000275",
+   "prompt": "0.0000011",
+   "web_search": "0.01"
+  }
+ },
+ "notes": [
+  "Generated by `session-receipt update-prices`; do not hand-edit.",
+  "OpenRouter passes Anthropic's list prices through; spot-checked against docs.claude.com/en/docs/about-claude/pricing on 2026-10-21.",
+  "`tiers` = long-prompt rates; pricecheck probes stay below them."
+ ],
+ "sha256": "30ea0c349a7c8693746f365dd75437db1db3611797cbb663cc89f880cb13c529",
+ "source": "OpenRouter list",
+ "unit": "USD per million tokens (MTok)",
+ "url": "https://openrouter.ai/api/v1/models"
+}

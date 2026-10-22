@@ -1,0 +1,75 @@
+{
+  "disclaimer": "API list-price equivalent. Not what a subscription plan bills.",
+  "generated_at": "2026-01-06T12:00:00Z",
+  "privacy": "public",
+  "receipts": [
+    {
+      "kind": "session",
+      "label": "one session (session #6a9871)",
+      "models": [
+        {
+          "cache_read": 2500,
+          "cache_write": 1000,
+          "cost_usd": 0.00747,
+          "input": 110,
+          "missing": false,
+          "name": "claude-sonnet-5-5",
+          "output": 450,
+          "price_check": "ok",
+          "price_detail": null,
+          "reasoning": null
+        },
+        {
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost_usd": 0.00019999999999999998,
+          "input": 1000,
+          "missing": false,
+          "name": "claude-haiku-5-5",
+          "output": 200,
+          "price_check": "ok",
+          "price_detail": null,
+          "reasoning": null
+        },
+        {
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 300,
+          "missing": true,
+          "name": "mystery-model-9",
+          "output": 30,
+          "price_check": "unverified",
+          "price_detail": null,
+          "reasoning": null
+        }
+      ],
+      "pricing_provenance": {
+        "as_of": "2026-10-21",
+        "checked": "2026-10-21",
+        "overrides_sha256": "56f81781c8e4c6c4edd3b3006677e01c285f05747d69687b0b54ab84d2260205",
+        "source": "OpenRouter list"
+      },
+      "provisional": false,
+      "session_ref": "session #6a9871",
+      "source": "claude",
+      "tool_version": "ccusage 20.0.38",
+      "totals": {
+        "cache_read": 2500,
+        "cache_write": 1000,
+        "cost_usd": 0.00767,
+        "input": 1410,
+        "output": 680,
+        "partial": true,
+        "total_tokens": 5590
+      },
+      "tz": "UTC",
+      "unpriced": [
+        "mystery-model-9"
+      ],
+      "window_end": "2026-01-05T10:03:00.000Z",
+      "window_start": "2026-01-05T10:00:00.000Z"
+    }
+  ],
+  "schema": "session-receipt/1"
+}
