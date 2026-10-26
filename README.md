@@ -39,8 +39,9 @@ receipt, or run `/session-receipt:receipt`. If something is missing, the skill r
 exact fix for each problem. On Windows the first run usually asks for one extra command, which
 adds `tzdata` to your Python (see [Windows](#windows)).
 
-The plugin has no version number, so every new commit is an update. Turn on auto-update for the
+Updates arrive when the version changes, not with every commit. Turn on auto-update for the
 `session-receipt` marketplace in `/plugin`, or run `claude plugin update session-receipt@session-receipt`.
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 Remove it with `claude plugin uninstall session-receipt@session-receipt`.
 
 ### Without the plugin
@@ -347,3 +348,17 @@ python3 -m unittest discover -s tests -v
 Tests use synthetic fixtures only, generated into a temp dir at test time (`examples/make_fixtures.py`,
 compact JSON because ccusage silently ignores non-compact lines). On Windows, which forbids `<` and `>`
 in file names, the hostile-path fixture uses `&` and `'` instead of `<img src=x>`.
+
+## Releasing
+
+Claude Code installs an update only when the version in `.claude-plugin/plugin.json` changes. A
+change merged without a version bump never reaches plugin users, fixes included. So every pull
+request that should reach users:
+
+1. Bumps the version, and keeps the copies in `package.json`, `package-lock.json`,
+   `pyproject.toml` and `session_receipt/__init__.py` the same. `npm version <x.y.z>
+   --no-git-tag-version` updates the two npm files; `tests/test_version.py` fails if any copy
+   differs. `marketplace.json` sets no version of its own.
+2. Adds a section to `CHANGELOG.md`.
+
+After it merges, tag the merge commit `v<x.y.z>` and push the tag.

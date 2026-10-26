@@ -1,5 +1,23 @@
 # Changelog
 
+Plugin users get an update only when the version changes. See [Releasing](README.md#releasing).
+
+## 1.0.1 (2026-10-26)
+
+### Plugin updates
+
+- The plugin now has a version, in `.claude-plugin/plugin.json`. Claude Code installs an update
+  only when that version changes, not with every commit to `main` (#10).
+- `package.json`, `package-lock.json`, `pyproject.toml` and the Python package say the same
+  version. A test fails if any of them differ (#10).
+- The README has a "Releasing" section: every pull request that should reach users bumps the
+  version, adds a changelog entry, and gets a `v<x.y.z>` tag after merging (#10).
+
+### Listing
+
+- The plugin has an icon: a real receipt rendered from the synthetic demo (#10).
+- `plugin.json` names the demo page as the plugin's homepage (#10).
+
 ## 1.0.0 (2026-10-26)
 
 The first release. Session Receipt turns your Claude Code usage logs into a receipt. The receipt shows recorded tokens, a cost at API list prices, and where each number came from. Codex support is experimental. The tool makes no model calls, and receipts make no network calls.
