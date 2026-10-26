@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "Local, deterministic, API-equivalent usage receipt for Claude Code and Codex sessions"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-dependencies = []
+# Windows ships no IANA time zone database, so zoneinfo needs tzdata there (not installed elsewhere).
+dependencies = ["tzdata; sys_platform == 'win32'"]
 
 [project.scripts]
 session-receipt = "session_receipt.cli:main"

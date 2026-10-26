@@ -6,7 +6,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session_end.py\"",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/run_hook.js"
+            ],
             "timeout": 5
           }
         ]

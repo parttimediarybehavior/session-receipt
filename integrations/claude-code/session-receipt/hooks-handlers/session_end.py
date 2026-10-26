@@ -36,12 +36,45 @@ def enabled():
     return os.environ.get("SESSION_RECEIPT_AUTO") == "1" or os.path.exists(os.path.join(c, "auto-enabled"))
 
 
+def _looks_absolute(word):
+    """Syntax only, the same on every OS: /x, \\x, \\\\server\\share, C:\\x, C:/x."""
+    return word[:1] in ("/", "\\") or (len(word) > 2 and word[0].isalpha() and word[1] == ":"
+                                        and word[2] in "/\\")
+
+
 def cli_cmd():
-    cmd = os.environ.get("SESSION_RECEIPT_CMD")
-    if cmd:
-        return cmd.split()
-    exe = shutil.which("session-receipt")
-    return [exe] if exe else None
+    """The argv prefix that runs the CLI. Never run through a shell, and decided by syntax alone,
+    never by which files exist. SESSION_RECEIPT_CMD is one of:
+    - a JSON array of strings (recommended): ["C:\\\\Users\\\\Jane Doe\\\\.venv\\\\Scripts\\\\session-receipt.exe"]
+    - the whole value in double quotes: one executable path, used as is, no arguments
+    - one word: an executable name or path without spaces
+    - several words, the first not an absolute path: split on whitespace (python3 /opt/sr/cli.py)
+    Unset: `session-receipt` on PATH. Raises ValueError for anything else, including an absolute
+    path followed by more words, which could be a path with spaces (use a JSON array)."""
+    cmd = os.environ.get("SESSION_RECEIPT_CMD", "").strip()
+    if not cmd:
+        exe = shutil.which("session-receipt")
+        return [exe] if exe else None
+    if cmd.startswith("["):
+        try:
+            argv = json.loads(cmd)
+        except ValueError as e:
+            raise ValueError(f"SESSION_RECEIPT_CMD is not a valid JSON array ({e})")
+        if not (isinstance(argv, list) and argv and all(isinstance(a, str) and a for a in argv)):
+            raise ValueError("SESSION_RECEIPT_CMD must be a JSON array of non-empty strings")
+        return argv
+    if len(cmd) > 1 and cmd[0] == cmd[-1] == '"' and '"' not in cmd[1:-1]:
+        if not cmd[1:-1].strip():
+            raise ValueError("SESSION_RECEIPT_CMD is an empty quoted path")
+        return [cmd[1:-1]]
+    if '"' in cmd:
+        raise ValueError("SESSION_RECEIPT_CMD has double quotes that do not wrap the whole value; "
+                         "use a JSON array")
+    words = cmd.split()
+    if len(words) > 1 and _looks_absolute(words[0]):
+        raise ValueError("SESSION_RECEIPT_CMD is ambiguous: an absolute path followed by more words "
+                         "may be a path with spaces; use a JSON array")
+    return words
 
 
 def wait_stable(path):
@@ -61,15 +94,37 @@ def wait_stable(path):
     return False
 
 
+def read_event(stream):
+    """The hook's JSON input as a dict, or None. A UTF-8 byte-order mark is allowed: PowerShell can
+    add one when text is piped in by hand."""
+    try:
+        event = json.loads(stream.read().decode("utf-8-sig"))
+    except Exception:
+        return None
+    return event if isinstance(event, dict) else None
+
+
+def log_line(msg):
+    os.makedirs(data_dir(), exist_ok=True)
+    with open(os.path.join(data_dir(), "hook.log"), "a") as fh:
+        fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} {msg}\n")
+
+
 def worker(event):
     sid = event.get("session_id") or ""
     out = os.path.join(data_dir(), "receipts")
     os.makedirs(out, exist_ok=True)
     log = os.path.join(data_dir(), "hook.log")
     stable = wait_stable(event.get("transcript_path"))
-    cmd = cli_cmd()
+    try:
+        cmd, cmd_error = cli_cmd(), None
+    except ValueError as e:
+        cmd, cmd_error = None, str(e)
     with open(log, "a") as fh:
         stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        if cmd_error:
+            fh.write(f"{stamp} {cmd_error}; skipped\n")
+            return 3
         if not cmd:
             fh.write(f"{stamp} session-receipt not found on PATH and SESSION_RECEIPT_CMD unset; skipped\n")
             return 3
@@ -81,25 +136,50 @@ def worker(event):
                      f"(run `session-receipt session --id {sid}` later)\n")
             return 5
         full = cmd + ["session", "--id", sid, "--out", out]
-        r = subprocess.run(full, capture_output=True, text=True, timeout=300,
-                           env=dict(os.environ, SESSION_RECEIPT_IN_HOOK="1"))
+        # CREATE_NO_WINDOW (Windows only; 0 elsewhere): a detached worker has no console, so a
+        # console child would otherwise pop up a window of its own.
+        try:
+            r = subprocess.run(full, capture_output=True, text=True, timeout=300,
+                               env=dict(os.environ, SESSION_RECEIPT_IN_HOOK="1"),
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as e:  # e.g. a SESSION_RECEIPT_CMD path that does not exist
+            fh.write(f"{stamp} could not start {cmd[0]!r}: {e}; skipped\n")
+            return 6
         fh.write(f"{stamp} reason={event.get('reason')} transcript_stable={stable} rc={r.returncode}\n")
         if r.returncode:
             fh.write(r.stderr[-2000:] + "\n")
         return r.returncode
 
 
+def spawn_worker(event):
+    """Windows has no fork: start this script again as a detached worker, event passed in env."""
+    env = dict(os.environ, SESSION_RECEIPT_IN_HOOK="1", SESSION_RECEIPT_HOOK_EVENT=json.dumps(event))
+    argv = [sys.executable, os.path.abspath(__file__), "--worker"]
+    kw = dict(env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+              stderr=subprocess.DEVNULL, close_fds=True)
+    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    try:  # leave Claude Code's job object where allowed, so the worker outlives the hook
+        subprocess.Popen(argv, creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, **kw)
+    except OSError:
+        subprocess.Popen(argv, creationflags=flags, **kw)
+
+
 def main():
+    if sys.argv[1:] == ["--worker"]:  # detached Windows worker started by spawn_worker()
+        return worker(json.loads(os.environ.pop("SESSION_RECEIPT_HOOK_EVENT", "{}")))
     if os.environ.get("SESSION_RECEIPT_IN_HOOK") == "1":
         return 0  # nested run: never recurse
-    try:
-        event = json.load(sys.stdin)
-    except Exception:
-        return 0
     if not enabled():
+        return 0
+    event = read_event(sys.stdin.buffer)
+    if event is None:  # say so: a silent exit would look like a disabled hook
+        log_line("hook input is not a JSON object; skipped")
         return 0
     if os.environ.get("SESSION_RECEIPT_FOREGROUND") == "1":  # tests only
         return worker(event)
+    if os.name == "nt":
+        spawn_worker(event)
+        return 0
     pid = os.fork()
     if pid:  # parent: reap the short-lived intermediate child and return now
         os.waitpid(pid, 0)

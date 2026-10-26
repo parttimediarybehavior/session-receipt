@@ -19,6 +19,8 @@ SID_C = "cccccccc-1111-4111-8111-000000000001"
 SID_D = "dddddddd-1111-4111-8111-000000000001"
 SID_F = "ffffffff-1111-4111-8111-000000000001"
 SID_G = "99999999-1111-4111-8111-000000000001"
+# Windows forbids < and > in file names, so there the hostile project dir uses & and ' instead.
+HOSTILE_DIR = "-home-alice-a&b='x'" if os.name == "nt" else "-home-alice-<img src=x>"
 
 
 def compact(o):
@@ -97,7 +99,7 @@ def build(out):
     open(os.path.join(pe, "empty.jsonl"), "w").close()
 
     # F: hostile
-    pf = os.path.join(out, "f_hostile", "projects", "-home-alice-<img src=x>")
+    pf = os.path.join(out, "f_hostile", "projects", HOSTILE_DIR)
     write_lines(os.path.join(pf, SID_F + ".jsonl"), [
         rec(SID_F, "2026-01-05T10:00:00.000Z", "f1", "<script>alert(1)</script>", 10, 5,
             cwd="/home/alice/<img src=x>")])

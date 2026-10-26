@@ -6,18 +6,18 @@
 import json, os, re, shutil, subprocess, sys, tempfile, unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIX = os.path.join(ROOT, "examples", "fixtures")
 sys.path.insert(0, ROOT)
 from session_receipt import ccusage_adapter as ad  # noqa: E402
+from tests.support import FIX  # noqa: E402  (fixtures generated into a temp dir)
 
 
 def read(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 
 def write(path, body):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(body)
 
 

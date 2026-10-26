@@ -72,7 +72,8 @@ def _tz(name):
     try:
         ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError, KeyError):
-        raise ReceiptError("unknown timezone %r" % name)
+        hint = "; on Windows, install tzdata (pip install tzdata)" if os.name == "nt" else ""
+        raise ReceiptError("unknown timezone %r%s" % (name, hint))
     return name
 
 
@@ -155,7 +156,7 @@ def emit(receipts, out_dir, name, fmts, now_iso, private, show_env):
         else:
             raise ReceiptError("unknown format %r (use html,svg,json)" % f)
         path = os.path.join(out_dir, "%s.%s" % (name, f))
-        with open(path, "w", encoding="utf-8") as fh:
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:  # same bytes on every OS
             fh.write(body)
         written.append(path)
     return written

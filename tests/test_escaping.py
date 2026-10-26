@@ -3,7 +3,10 @@ import os
 import tempfile
 import unittest
 
-from tests.support import read, cli, fx, _tmp
+from tests.support import read, cli, fx, mf, _tmp
+
+HOSTILE_ESCAPED = {"-home-alice-<img src=x>": "-home-alice-&lt;img src=x&gt;",
+                   "-home-alice-a&b='x'": "-home-alice-a&amp;b=&#x27;x&#x27;"}
 
 
 def render(*extra):
@@ -28,7 +31,8 @@ class TestEscaping(unittest.TestCase):
         for ext, text in render("--private").items():
             with self.subTest(ext=ext):
                 self.assertNotIn("<img", text.lower())
-                self.assertIn("-home-alice-&lt;img src=x&gt;", text)
+                self.assertNotIn(mf.HOSTILE_DIR, text)
+                self.assertIn(HOSTILE_ESCAPED[mf.HOSTILE_DIR], text)
 
 
 if __name__ == "__main__":
