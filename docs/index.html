@@ -116,15 +116,15 @@
 
   <section aria-labelledby="try">
     <h2 id="try">Try it</h2>
-    <p>Install from source (no wheel is published), then render the synthetic demo:</p>
-<pre><code>git clone https://github.com/parttimediarybehavior/session-receipt.git
-cd session-receipt
-npm ci --prefix vendor          # pinned ccusage 20.0.38 (MIT)
-python3 -m venv .venv &amp;&amp; .venv/bin/pip install -e .
-.venv/bin/session-receipt demo --out /tmp/sr_demo --now 2026-01-06T12:00:00Z</code></pre>
-    <p>Then, on your own machine, <code>.venv/bin/session-receipt session --latest</code> for your most recent
-      session. Python 3.10+ and Node.js are required; only Linux x64 has been tested. Your logs are
-      only read, never modified, and nothing leaves your computer.</p>
+    <p>In Claude Code, install it as a plugin:</p>
+<pre><code>/plugin install session-receipt --marketplace parttimediarybehavior/session-receipt</code></pre>
+    <p>Or, without Claude Code's plugin system, in one line (macOS and Linux), then render the synthetic demo:</p>
+<pre><code>git clone https://github.com/parttimediarybehavior/session-receipt.git &amp;&amp; npm ci --prefix session-receipt
+session-receipt/bin/session-receipt demo --out sr_demo --now 2026-01-06T12:00:00Z</code></pre>
+    <p>Then <code>session-receipt/bin/session-receipt session --latest</code> for your most recent
+      session. Python 3.10+ and Node.js are required; Linux x64 and Windows 10 x64 have been tested.
+      The README covers Windows. Your logs are only read, never modified, and nothing leaves your
+      computer.</p>
   </section>
 </main>
 

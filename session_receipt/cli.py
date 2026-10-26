@@ -2,6 +2,8 @@
 import argparse
 import importlib.util
 import os
+import platform
+import shutil
 import sys
 import tempfile
 from datetime import timedelta
@@ -61,6 +63,7 @@ def build_parser():
     p.add_argument("--model", action="append", help="full model name (default: all reference models)")
     u = sub.add_parser("update-prices", help="refresh prices from OpenRouter's public list (network, once)")
     u.add_argument("--from", dest="src", help="read a saved copy of %s instead of downloading" % prices.URL)
+    sub.add_parser("doctor", help="check what session-receipt needs, and say how to fix what is missing")
     return ap
 
 
@@ -235,9 +238,49 @@ def cmd_pricecheck(args):
     return 1 if bad else 0
 
 
+def cmd_doctor(args):
+    """Check Python, the time zone database and ccusage. Exit 1 if any is missing."""
+    missing = 0
+
+    def line(status, what, detail):
+        print("%-8s %-11s %s" % (status, what, detail))
+
+    line("ok", "python", "%s (%s)" % (platform.python_version(), sys.executable))
+    try:
+        ZoneInfo("America/New_York")
+        line("ok", "time zones", "IANA time zone database found")
+    except ZoneInfoNotFoundError:
+        missing += 1
+        line("MISSING", "time zones", 'no IANA time zone database. Run: "%s" -m pip install --user tzdata'
+             % sys.executable)
+    try:
+        found = "%s (%s)" % (ad.tool_version(), ad.find_binary())
+    except (ReceiptError, OSError):
+        missing += 1
+        if os.environ.get("SESSION_RECEIPT_CCUSAGE"):
+            fix = ('SESSION_RECEIPT_CCUSAGE is "%s", which does not run. Fix the path or unset it.'
+                   % os.environ["SESSION_RECEIPT_CCUSAGE"])
+        elif shutil.which("npm"):
+            fix = 'not installed. Run: npm ci --prefix "%s"' % ad.ROOT
+        else:
+            fix = ('not installed, and Node.js is missing. Install Node.js from https://nodejs.org '
+                   '(it includes npm), then run: npm ci --prefix "%s"' % ad.ROOT)
+        line("MISSING", "ccusage", fix)
+    else:
+        line("ok", "ccusage", found)
+    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    logs = os.path.join(home, "projects")
+    line("info", "claude logs", logs if os.path.isdir(logs) else "none found at %s yet" % logs)
+    if missing:
+        print("%d thing(s) missing; receipts will not work until they are fixed." % missing)
+    return 1 if missing else 0
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
+        if args.cmd == "doctor":
+            return cmd_doctor(args)
         if args.cmd == "pricecheck":
             return cmd_pricecheck(args)
         if args.cmd == "update-prices":

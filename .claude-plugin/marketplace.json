@@ -1,0 +1,13 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "session-receipt",
+  "description": "Session Receipt: local usage receipts for Claude Code sessions.",
+  "owner": { "name": "mothwake" },
+  "plugins": [
+    {
+      "name": "session-receipt",
+      "source": "./",
+      "description": "On-demand usage receipts for Claude Code sessions. Deterministic local code; no model calls."
+    }
+  ]
+}

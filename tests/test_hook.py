@@ -2,7 +2,7 @@
 import importlib.util, json, os, shutil, subprocess, sys, tempfile, threading, time, unittest, venv
 from unittest import mock
 
-HOOK = os.path.join(os.path.dirname(__file__), "..", "session-receipt", "hooks-handlers", "session_end.py")
+HOOK = os.path.join(os.path.dirname(__file__), "..", "hooks-handlers", "session_end.py")
 SID = "11111111-1111-4111-8111-111111111111"
 
 _spec = importlib.util.spec_from_file_location("session_end", HOOK)
@@ -212,10 +212,15 @@ class CliCmdParsing(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.parse(value)
 
-    def test_unset_uses_path(self):
-        with mock.patch.dict(os.environ, {}, clear=True), \
-                mock.patch.object(session_end.shutil, "which", return_value="/x/session-receipt"):
-            self.assertEqual(session_end.cli_cmd(), ["/x/session-receipt"])
+    def test_unset_uses_the_bundled_cli(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            argv = session_end.cli_cmd()
+        self.assertEqual(argv, [sys.executable, "-c", session_end.BUNDLED, session_end.ROOT])
+        out = tempfile.mkdtemp()
+        r = subprocess.run(argv + ["demo", "--out", "demo", "--now", "2026-01-06T12:00:00Z"], cwd=out,
+                           capture_output=True, text=True, timeout=120)  # from another folder
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(out, "demo", "demo-simple.svg")))
 
 
 class SpacedCommandLaunch(HookFixture):
@@ -295,7 +300,7 @@ class SpacedCommandLaunch(HookFixture):
         self.assertIn("could not start %r" % missing, self.log())
 
 
-PLUGIN = os.path.join(os.path.dirname(__file__), "..", "session-receipt")
+PLUGIN = os.path.join(os.path.dirname(__file__), "..")
 SH = shutil.which("sh") or next((p for p in (r"C:\Program Files\Git\bin\sh.exe",) if os.path.exists(p)), None)
 
 
@@ -366,7 +371,7 @@ class HooksJsonInterpreter(unittest.TestCase):
         r, ran = self.run_command()
         self.assertIsNone(ran)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("no Python 3 found", r.stderr)
+        self.assertIn("no Python 3.10 or later found", r.stderr)
 
 
 if os.name == "nt":

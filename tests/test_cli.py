@@ -42,7 +42,8 @@ class TestCli(unittest.TestCase):
                          env={"SESSION_RECEIPT_CCUSAGE": "/nonexistent/ccusage"})
         self.assertEqual(rc, 1)
         self.assertIn("ccusage binary not found", se)
-        self.assertIn("npm ci --prefix vendor", se)
+        self.assertIn("npm ci --prefix", se)
+        self.assertIn("session-receipt doctor", se)
 
     def test_bad_claude_dir_is_a_clear_error(self):
         rc, so, se = cli("session", "--latest", "--claude-dir", "/nonexistent/dir")

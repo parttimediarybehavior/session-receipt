@@ -1,15 +1,16 @@
 # Third-party notices
 
-## ccusage 20.0.38 (pinned in `vendor/`)
+## ccusage 20.0.38 (pinned in `package.json`)
 
 Session Receipt runs the `ccusage` command-line tool as a subprocess. It is not
-copied into this repository; install it with `npm ci --prefix vendor`.
+copied into this repository. Claude Code installs it with the plugin; elsewhere, install it
+with `npm ci`.
 
 - npm package `ccusage` 20.0.38, license field: MIT
 - native binary package `@ccusage/ccusage-linux-x64` 20.0.38, license field: MIT
   (other platforms use the matching `@ccusage/ccusage-<platform>` package)
 
-The ccusage license, reproduced verbatim from `vendor/node_modules/ccusage/LICENSE`:
+The ccusage license, reproduced verbatim from `node_modules/ccusage/LICENSE`:
 
 ----
 
