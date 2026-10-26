@@ -24,14 +24,31 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/session-receipt demo --out /tmp/sr_demo --now 2026-01-06T12:00:00Z   # synthetic demo
 ```
 
-Editable/source install only; no wheel is published. Python 3.10+ standard library only, plus
-Node.js for `npm ci` (tested with Node 18.19). ccusage ships a native binary per platform
-(darwin/linux/win32, x64/arm64); **only Linux x64 has been tested.** For an offline machine, run
+Editable/source install only; no wheel is published. Python 3.10+ standard library only (plus `tzdata` on
+Windows), plus Node.js for `npm ci` (tested with Node 18.19). ccusage ships a native binary per platform
+(darwin/linux/win32, x64/arm64); **only Linux x64 has been tested on real logs.** Windows x64 runs
+the test suite in CI (synthetic fixtures only; see [Windows](#windows)). For an offline machine, run
 `npm ci --prefix vendor` elsewhere and copy `vendor/node_modules/` across, or point
 `SESSION_RECEIPT_CCUSAGE` at an existing ccusage 20.0.38. Uninstall: `pip uninstall
 session-receipt` and delete the project directory (nothing is written outside it except the
 optional price-check cache in `~/.cache/session-receipt/`, or `$SESSION_RECEIPT_CACHE_DIR`).
 You can also run it without installing: `python3 -m session_receipt ...` from the project root.
+
+### Windows
+
+```
+py -m venv .venv
+.venv\Scripts\pip install -e .         # also installs tzdata: Windows has no IANA time zone database
+npm ci --prefix vendor
+.venv\Scripts\session-receipt session --latest --tz America/New_York
+```
+
+- Running without installing (`py -m session_receipt`) needs `py -m pip install tzdata` first.
+- Pass `--tz`: there is no `/etc/timezone`, so the default is `UTC` unless `TZ` is set.
+- ccusage is called as its native `ccusage.exe` (`vendor/node_modules/@ccusage/ccusage-win32-<arch>/`).
+- The SessionEnd hook detaches with `DETACHED_PROCESS` instead of `fork`. Its command is `python3`,
+  run through Claude Code's shell (Git Bash), so `python3` must resolve there. The Windows CI job
+  runs the hook tests, but the hook has not been checked inside a real Claude Code session on Windows.
 
 ## Try it with no real logs
 
@@ -165,5 +182,6 @@ snapshot (see above) rather than a hand-written table.
 python3 -m unittest discover -s tests -v
 ```
 
-Tests use synthetic fixtures only (`examples/make_fixtures.py`, compact JSON because ccusage
-silently ignores non-compact lines).
+Tests use synthetic fixtures only, generated into a temp dir at test time (`examples/make_fixtures.py`,
+compact JSON because ccusage silently ignores non-compact lines). On Windows, which forbids `<` and `>`
+in file names, the hostile-path fixture uses `&` and `'` instead of `<img src=x>`.

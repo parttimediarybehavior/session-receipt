@@ -84,7 +84,7 @@ def _override_entry(r):
 
 def _write_json(path, obj):
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", newline="\n") as f:
         json.dump(obj, f, indent=1, sort_keys=True)
         f.write("\n")
     os.replace(tmp, path)

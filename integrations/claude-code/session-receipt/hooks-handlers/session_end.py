@@ -81,15 +81,33 @@ def worker(event):
                      f"(run `session-receipt session --id {sid}` later)\n")
             return 5
         full = cmd + ["session", "--id", sid, "--out", out]
+        # CREATE_NO_WINDOW (Windows only; 0 elsewhere): a detached worker has no console, so a
+        # console child would otherwise pop up a window of its own.
         r = subprocess.run(full, capture_output=True, text=True, timeout=300,
-                           env=dict(os.environ, SESSION_RECEIPT_IN_HOOK="1"))
+                           env=dict(os.environ, SESSION_RECEIPT_IN_HOOK="1"),
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         fh.write(f"{stamp} reason={event.get('reason')} transcript_stable={stable} rc={r.returncode}\n")
         if r.returncode:
             fh.write(r.stderr[-2000:] + "\n")
         return r.returncode
 
 
+def spawn_worker(event):
+    """Windows has no fork: start this script again as a detached worker, event passed in env."""
+    env = dict(os.environ, SESSION_RECEIPT_IN_HOOK="1", SESSION_RECEIPT_HOOK_EVENT=json.dumps(event))
+    argv = [sys.executable, os.path.abspath(__file__), "--worker"]
+    kw = dict(env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+              stderr=subprocess.DEVNULL, close_fds=True)
+    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    try:  # leave Claude Code's job object where allowed, so the worker outlives the hook
+        subprocess.Popen(argv, creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, **kw)
+    except OSError:
+        subprocess.Popen(argv, creationflags=flags, **kw)
+
+
 def main():
+    if sys.argv[1:] == ["--worker"]:  # detached Windows worker started by spawn_worker()
+        return worker(json.loads(os.environ.pop("SESSION_RECEIPT_HOOK_EVENT", "{}")))
     if os.environ.get("SESSION_RECEIPT_IN_HOOK") == "1":
         return 0  # nested run: never recurse
     try:
@@ -100,6 +118,9 @@ def main():
         return 0
     if os.environ.get("SESSION_RECEIPT_FOREGROUND") == "1":  # tests only
         return worker(event)
+    if os.name == "nt":
+        spawn_worker(event)
+        return 0
     pid = os.fork()
     if pid:  # parent: reap the short-lived intermediate child and return now
         os.waitpid(pid, 0)

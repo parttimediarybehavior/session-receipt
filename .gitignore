@@ -8,3 +8,4 @@ vendor/node_modules/
 .pytest_cache/
 .cache*/
 .DS_Store
+examples/fixtures/

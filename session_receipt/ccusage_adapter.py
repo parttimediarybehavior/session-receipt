@@ -5,6 +5,7 @@ No model calls, no network (always --offline).  Raw logs are only ever read by c
 import hashlib
 import json
 import os
+import platform
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -64,9 +65,19 @@ def short_id(session_id):
     return hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:6]
 
 
+def _default_binary():
+    modules = os.path.join(ROOT, "vendor", "node_modules")
+    if os.name != "nt":
+        return os.path.join(modules, ".bin", "ccusage")
+    # On Windows .bin/ccusage is a POSIX shell shim. The ccusage npm launcher only forwards argv
+    # to its per-platform native binary, so call that .exe directly.
+    arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
+    return os.path.join(modules, "@ccusage", "ccusage-win32-" + arch, "bin", "ccusage.exe")
+
+
 def find_binary():
     env = os.environ.get("SESSION_RECEIPT_CCUSAGE")
-    path = env or os.path.join(ROOT, "vendor", "node_modules", ".bin", "ccusage")
+    path = env or _default_binary()
     if not (os.path.isfile(path) and os.access(path, os.X_OK)):
         raise ReceiptError(
             "ccusage binary not found at %s. Run `npm ci --prefix vendor` in the project "
@@ -84,7 +95,7 @@ def run_ccusage(args, claude_dir=None, codex_home=None, parse=True):
     if codex_home:
         env["CODEX_HOME"] = str(codex_home)
     try:
-        p = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=300)
+        p = subprocess.run(cmd, env=env, capture_output=True, encoding="utf-8", timeout=300)
     except subprocess.TimeoutExpired:
         raise ReceiptError("ccusage timed out")
     if p.returncode != 0:
