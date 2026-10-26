@@ -2,13 +2,16 @@
 import argparse
 import importlib.util
 import os
+import platform
+import shlex
+import shutil
 import sys
 import tempfile
 from datetime import timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import ccusage_adapter as ad
-from . import export_json, pricecheck, prices, render_html, render_svg
+from . import codex_check, export_json, pricecheck, prices, render_html, render_svg
 from .ccusage_adapter import ReceiptError
 
 
@@ -16,14 +19,30 @@ class NotFound(ReceiptError):
     pass
 
 
-def default_tz():
-    tz = os.environ.get("TZ")
+def default_tz(environ=os.environ, timezone_file="/etc/timezone", localtime="/etc/localtime"):
+    """--tz default: SESSION_RECEIPT_TZ, TZ, /etc/timezone (Debian, Ubuntu), the zone named by the
+    /etc/localtime symlink (macOS, Fedora, Arch), else UTC. Windows has none of the files, so set
+    SESSION_RECEIPT_TZ there; TZ is read by other Windows programs in a different format."""
+    tz = environ.get("SESSION_RECEIPT_TZ") or environ.get("TZ")
     if not tz:
         try:
-            with open("/etc/timezone") as f:
+            with open(timezone_file) as f:
                 tz = f.read().strip()
         except OSError:
             tz = None
+    if not tz:
+        try:
+            _, sep, name = os.readlink(localtime).rpartition("zoneinfo/")
+        except (OSError, ValueError):
+            sep = name = ""
+        for prefix in ("posix/", "right/"):
+            name = name[len(prefix):] if name.startswith(prefix) else name
+        try:
+            if sep and name:
+                ZoneInfo(name)
+                tz = name
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            pass
     return tz or "UTC"
 
 
@@ -61,6 +80,7 @@ def build_parser():
     p.add_argument("--model", action="append", help="full model name (default: all reference models)")
     u = sub.add_parser("update-prices", help="refresh prices from OpenRouter's public list (network, once)")
     u.add_argument("--from", dest="src", help="read a saved copy of %s instead of downloading" % prices.URL)
+    sub.add_parser("doctor", help="check what session-receipt needs, and say how to fix what is missing")
     return ap
 
 
@@ -72,7 +92,11 @@ def _tz(name):
     try:
         ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError, KeyError):
-        raise ReceiptError("unknown timezone %r" % name)
+        src = next((v for v in ("SESSION_RECEIPT_TZ", "TZ") if os.environ.get(v) == name), None)
+        hint = " (from %s)" % src if src else ""
+        if os.name == "nt" and importlib.util.find_spec("tzdata") is None:
+            hint += "; install tzdata (session-receipt doctor prints the command)"
+        raise ReceiptError("unknown timezone %r%s; use an IANA name such as America/Chicago" % (name, hint))
     return name
 
 
@@ -119,10 +143,20 @@ def select_sessions(args, now):
         if hits and (since or until):
             full = {r.session_id: r for r in _fetch_sessions(src, args, tz, None, None)}
             hits = [full[r.session_id] for r in hits]
+        if src == "codex":
+            for r in hits:
+                codex_check.check_session(r, args.codex_home)
         found += hits
     if not found:
         if args.id:
-            raise NotFound("session %r not found in source(s): %s" % (args.id, ", ".join(_sources(args))))
+            extra = ""
+            if "codex" in _sources(args):
+                n = codex_check.uncounted_session(args.id, args.codex_home)
+                if n:
+                    extra = ("; the Codex logs record %s tokens for it, which ccusage did not count "
+                             "(see ccusage/ccusage#1970); a daily receipt for that day shows the gap"
+                             % "{:,}".format(n))
+            raise NotFound("session %r not found in source(s): %s%s" % (args.id, ", ".join(_sources(args)), extra))
         raise NotFound("no sessions found for %s to %s (source(s): %s). Pass --since/--until or "
                        "--claude-dir/--codex-home." % (since, until, ", ".join(_sources(args))))
     return found
@@ -136,7 +170,17 @@ def select_daily(args):
             days = ad.fetch_claude_daily(tz, args.date, args.date, claude_dir=args.claude_dir)
         else:
             days = ad.fetch_codex_daily(tz, args.date, args.date, codex_home=args.codex_home)
-        found += [d for d in days if d.window_start == args.date]
+        hits = [d for d in days if d.window_start == args.date]
+        if src == "codex":
+            day_sessions = ad.fetch_codex_sessions(tz, args.date, args.date, codex_home=args.codex_home)
+            if not hits and codex_check.day_log(args.date, tz, args.codex_home)[0]:
+                # ccusage counted nothing, but the logs record usage: say so on the receipt itself
+                empty = ad.Receipt(kind="daily", source="codex", label="one day, %s, %s" % (args.date, tz),
+                                   tz=tz, window_start=args.date, window_end=args.date)
+                hits = [ad._finish_codex(empty, [], None, ad.tool_version(), ad.provenance())]
+            for d in hits:
+                codex_check.check_daily(d, day_sessions, args.codex_home)
+        found += hits
     if not found:
         raise NotFound("no usage recorded for %s (%s) in source(s): %s"
                        % (args.date, tz, ", ".join(_sources(args))))
@@ -155,7 +199,7 @@ def emit(receipts, out_dir, name, fmts, now_iso, private, show_env):
         else:
             raise ReceiptError("unknown format %r (use html,svg,json)" % f)
         path = os.path.join(out_dir, "%s.%s" % (name, f))
-        with open(path, "w", encoding="utf-8") as fh:
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:  # same bytes on every OS
             fh.write(body)
         written.append(path)
     return written
@@ -234,9 +278,57 @@ def cmd_pricecheck(args):
     return 1 if bad else 0
 
 
+def tzdata_install(python=sys.executable, nt=os.name == "nt", venv=sys.prefix != sys.base_prefix):
+    """How to install tzdata for this Python. Windows users get the PowerShell form, which needs the
+    & call operator to run a quoted path; elsewhere the line is for sh, bash or zsh."""
+    args = "-m pip install%s tzdata" % ("" if venv else " --user")  # pip refuses --user in a venv
+    if nt:
+        return 'In PowerShell, run: & "%s" %s' % (python.replace("`", "``").replace("$", "`$"), args)
+    return "In a terminal, run: %s %s" % (shlex.quote(python), args)
+
+
+def cmd_doctor(args):
+    """Check Python, the time zone database and ccusage. Exit 1 if any is missing."""
+    missing = 0
+
+    def line(status, what, detail):
+        print("%-8s %-11s %s" % (status, what, detail))
+
+    line("ok", "python", "%s (%s)" % (platform.python_version(), sys.executable))
+    try:
+        ZoneInfo("America/New_York")
+        line("ok", "time zones", "IANA time zone database found")
+    except ZoneInfoNotFoundError:
+        missing += 1
+        line("MISSING", "time zones", "no IANA time zone database. " + tzdata_install())
+    try:
+        found = "%s (%s)" % (ad.tool_version(), ad.find_binary())
+    except (ReceiptError, OSError):
+        missing += 1
+        if os.environ.get("SESSION_RECEIPT_CCUSAGE"):
+            fix = ('SESSION_RECEIPT_CCUSAGE is "%s", which does not run. Fix the path or unset it.'
+                   % os.environ["SESSION_RECEIPT_CCUSAGE"])
+        elif shutil.which("npm"):
+            fix = 'not installed. Run: npm ci --prefix "%s"' % ad.ROOT
+        else:
+            fix = ('not installed, and Node.js is missing. Install Node.js from https://nodejs.org '
+                   '(it includes npm), then run: npm ci --prefix "%s"' % ad.ROOT)
+        line("MISSING", "ccusage", fix)
+    else:
+        line("ok", "ccusage", found)
+    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    logs = os.path.join(home, "projects")
+    line("info", "claude logs", logs if os.path.isdir(logs) else "none found at %s yet" % logs)
+    if missing:
+        print("%d thing(s) missing; receipts will not work until they are fixed." % missing)
+    return 1 if missing else 0
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
+        if args.cmd == "doctor":
+            return cmd_doctor(args)
         if args.cmd == "pricecheck":
             return cmd_pricecheck(args)
         if args.cmd == "update-prices":

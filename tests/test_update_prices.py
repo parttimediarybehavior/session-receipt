@@ -1,8 +1,15 @@
 """update-prices: OpenRouter snapshot -> dated reference + overrides, with no network (saved input)."""
 import json, os, tempfile, unittest
+from unittest import mock
 
 from tests.support import _tmp
-from session_receipt import prices, pricecheck
+from session_receipt import ccusage_adapter as ad, prices, pricecheck
+
+FILES = ("openrouter-snapshot.json", "reference.json", "ccusage-overrides.json")
+
+
+class Interrupt(BaseException):
+    """Stands in for KeyboardInterrupt, which would also stop the test runner."""
 
 
 def openrouter(sonnet_read="0.0000001", haiku_prompt="0.0000001"):
@@ -49,11 +56,199 @@ class TestUpdatePrices(unittest.TestCase):
         self.assertEqual(res["status"], "ok")
         self.assertAlmostEqual(res["effective"]["cache_read"], 0.20, places=9)
 
+    def test_published_files_use_lf(self):  # on Windows too: text mode would write CRLF
+        d, ref, ovr, notes = self.run_update(openrouter(sonnet_read="0.0000002"))
+        for n in FILES:
+            with open(os.path.join(d, n), "rb") as f:
+                data = f.read()
+            self.assertNotIn(b"\r", data, n)
+            self.assertTrue(data.endswith(b"}\n"), n)
+
     def test_tiered_model_is_never_flattened(self):
         d, ref, ovr, notes = self.run_update(openrouter(haiku_prompt="0.0000002"))
         self.assertNotIn("claude-haiku-5-5", ovr)
         self.assertTrue(any("haiku-5-5" in n and "NOT overridden" in n for n in notes))
         self.assertEqual(ref["models"]["haiku-5-5"]["tiers"][0]["min_prompt_tokens"], 100000)
+
+
+class TestUpdateFailureKeepsOldFiles(unittest.TestCase):
+    """A failed update must leave the active pricing files exactly as they were."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(dir=_tmp)
+        prices.update(openrouter(), "2026-10-01T00:00:00Z", pricing_dir=self.dir, log=lambda *_: None)
+        self.before = self.snapshot_files()
+        self.new = openrouter(sonnet_read="0.0000002")  # valid, and changes every file
+
+    def snapshot_files(self):
+        out = {}
+        for n in FILES:
+            with open(os.path.join(self.dir, n), "rb") as f:
+                out[n] = f.read()
+        return out
+
+    def update(self, raw=None):
+        return prices.update(self.new if raw is None else raw, "2026-10-21T20:58:00Z",
+                             pricing_dir=self.dir, log=lambda *_: None)
+
+    def assert_unchanged(self):
+        self.assertEqual(self.snapshot_files(), self.before)
+        self.assertEqual(sorted(os.listdir(self.dir)), sorted(FILES))  # no staging left behind
+
+    def test_probe_failure_after_a_successful_probe(self):
+        real, calls = pricecheck.check_model, []
+
+        def second_probe_fails(*a, **kw):
+            calls.append(a[0])
+            if len(calls) == 2:
+                raise ad.ReceiptError("ccusage failed (exit 1): boom")
+            return real(*a, **kw)
+
+        with mock.patch.object(pricecheck, "check_model", side_effect=second_probe_fails):
+            with self.assertRaisesRegex(ad.ReceiptError, "boom"):
+                self.update()
+        self.assertEqual(calls, ["claude-haiku-5-5", "claude-sonnet-5-5"])  # the first one ran
+        self.assert_unchanged()
+
+    def test_missing_ccusage(self):
+        with mock.patch.dict(os.environ, {"SESSION_RECEIPT_CCUSAGE": os.path.join(self.dir, "nope")}):
+            with self.assertRaisesRegex(ad.ReceiptError, "ccusage binary not found"):
+                self.update()
+        self.assert_unchanged()
+
+    def test_unusable_probe_output(self):
+        real = ad.run_ccusage
+
+        def no_sessions(args, **kw):
+            return real(args, **kw) if args == ["--version"] else {"sessions": []}
+
+        with mock.patch.object(ad, "run_ccusage", side_effect=no_sessions):
+            with self.assertRaisesRegex(ad.ReceiptError, "returned 0 sessions"):
+                self.update()
+        self.assert_unchanged()
+
+    def test_parse_errors(self):
+        bad = [b"not json", b"[]", b'{"models": []}', b'{"data": "x"}',
+               json.dumps({"data": [{"id": "anthropic/claude-x", "pricing": {"prompt": "abc"}}]}).encode(),
+               json.dumps({"data": [{"id": "anthropic/claude-x", "pricing": []}]}).encode()]
+        for raw in bad:
+            with self.subTest(raw=raw[:40]):
+                with self.assertRaisesRegex(ad.ReceiptError, "OpenRouter response"):
+                    self.update(raw)
+                self.assert_unchanged()
+
+    def test_no_claude_prices(self):
+        with self.assertRaisesRegex(ad.ReceiptError, "no Claude prices"):
+            self.update(json.dumps({"data": [{"id": "openai/gpt-5.5", "pricing": {}}]}).encode())
+        self.assert_unchanged()
+
+    def patched_replace(self, publish=(), restore=(), after=()):
+        """os.replace into the pricing dir that raises publish[name] instead of publishing a file,
+        restore[name] instead of putting its old copy back, or after[name] once it is published."""
+        real, publish, restore, after = os.replace, dict(publish), dict(restore), dict(after)
+
+        def fake(src, dst):
+            if os.path.dirname(os.path.abspath(dst)) != os.path.abspath(self.dir):
+                return real(src, dst)  # staging writes
+            base = os.path.basename(dst)
+            restoring = os.path.basename(os.path.dirname(src)) == "previous"
+            plan = restore if restoring else publish
+            if base in plan:
+                raise plan.pop(base)
+            real(src, dst)
+            if not restoring and base in after:
+                raise after.pop(base)
+        return mock.patch.object(prices.os, "replace", side_effect=fake)
+
+    def replace_failing_at(self, name, also_fail=()):
+        return self.patched_replace(publish={name: OSError("simulated failure replacing " + name)},
+                                    restore={n: OSError("simulated failure restoring " + n) for n in also_fail})
+
+    def test_publish_failure_rolls_back_files_already_replaced(self):
+        for name in FILES[1:]:  # at least one file is already replaced when this one fails
+            with self.subTest(failing=name):
+                with self.replace_failing_at(name):
+                    with self.assertRaisesRegex(ad.ReceiptError, "previous pricing files restored"):
+                        self.update()
+                self.assert_unchanged()
+
+    def test_locked_file_is_not_restored_onto(self):
+        # Windows-like: a file another program holds open refuses both the replace and any restore.
+        name = "ccusage-overrides.json"
+        with self.replace_failing_at(name, also_fail=(name,)):
+            with self.assertRaisesRegex(ad.ReceiptError, "previous pricing files restored"):
+                self.update()
+        self.assert_unchanged()
+
+    def test_publish_failure_on_first_use_removes_new_files(self):
+        self.dir = tempfile.mkdtemp(dir=_tmp)
+        with self.replace_failing_at("ccusage-overrides.json"):
+            with self.assertRaises(ad.ReceiptError):
+                self.update()
+        self.assertEqual(os.listdir(self.dir), [])
+
+    def test_interrupt_right_after_a_replace_rolls_it_back(self):
+        # Ctrl-C lands after os.replace has swapped reference.json in, before anything recorded it.
+        with self.patched_replace(after={"reference.json": Interrupt()}):
+            with self.assertRaises(Interrupt):
+                self.update()
+        self.assert_unchanged()
+
+    def test_interrupt_during_rollback_keeps_the_previous_files(self):
+        # Publishing overrides fails, then a second Ctrl-C hits while reference.json is put back.
+        with self.patched_replace(publish={"ccusage-overrides.json": OSError("simulated")},
+                                  restore={"reference.json": Interrupt()}):
+            with self.assertRaisesRegex(ad.ReceiptError, "could not restore reference.json") as e:
+                self.update()
+        kept = [n for n in os.listdir(self.dir) if n not in FILES]
+        self.assertEqual(len(kept), 1)
+        self.assertIn(kept[0], str(e.exception))
+        with open(os.path.join(self.dir, kept[0], "previous", "reference.json"), "rb") as f:
+            self.assertEqual(f.read(), self.before["reference.json"])
+        now = self.snapshot_files()
+        self.assertNotEqual(now["reference.json"], self.before["reference.json"])  # the reported mix
+        self.assertEqual(now["openrouter-snapshot.json"], self.before["openrouter-snapshot.json"])
+
+    def test_unwritable_pricing_dir(self):
+        with mock.patch.object(prices.tempfile, "mkdtemp", side_effect=PermissionError("read-only")):
+            with self.assertRaisesRegex(ad.ReceiptError, "nothing written"):
+                self.update()
+        self.assert_unchanged()
+
+    def test_backup_failure_changes_nothing(self):
+        with mock.patch.object(prices.shutil, "copyfile", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(ad.ReceiptError, "nothing changed"):
+                self.update()
+        self.assert_unchanged()
+
+    def test_failed_rollback_says_where_the_old_files_are(self):
+        with self.replace_failing_at("ccusage-overrides.json", also_fail=("reference.json",)):
+            with self.assertRaisesRegex(ad.ReceiptError, "could not restore") as e:
+                self.update()
+        msg = str(e.exception)
+        self.assertIn("reference.json", msg)
+        kept = [n for n in os.listdir(self.dir) if n not in FILES]
+        self.assertEqual(len(kept), 1)
+        self.assertIn(kept[0], msg)
+        with open(os.path.join(self.dir, kept[0], "previous", "reference.json"), "rb") as f:
+            self.assertEqual(f.read(), self.before["reference.json"])  # recoverable by hand
+
+    def test_success_replaces_all_three_consistently(self):
+        ref, ovr, notes = self.update()
+        after = self.snapshot_files()
+        self.assertTrue(all(after[n] != self.before[n] for n in FILES))
+        self.assertEqual(sorted(os.listdir(self.dir)), sorted(FILES))
+        snap = json.loads(after["openrouter-snapshot.json"])
+        on_disk = json.loads(after["reference.json"])
+        self.assertEqual(on_disk, ref)
+        self.assertEqual(snap["sha256"], ref["sha256"])
+        self.assertEqual(snap["fetched_at"], "2026-10-21T20:58:00Z")
+        self.assertEqual(json.loads(after["ccusage-overrides.json"]),
+                         {"defaults": {"pricingOverrides": ovr}})
+        self.assertEqual(list(ovr), ["claude-sonnet-5-5"])
+        res = pricecheck.check_model("claude-sonnet-5-5", os.path.join(self.dir, "ccusage-overrides.json"),
+                                     use_cache=False, reference_path=os.path.join(self.dir, "reference.json"))
+        self.assertEqual(res["status"], "ok")
 
 
 if __name__ == "__main__":

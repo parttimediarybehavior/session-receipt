@@ -5,6 +5,7 @@ No model calls, no network (always --offline).  Raw logs are only ever read by c
 import hashlib
 import json
 import os
+import platform
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -47,6 +48,7 @@ class Receipt:
     totals: dict = field(default_factory=dict)
     unpriced: list = field(default_factory=list)
     provisional: bool = False
+    count_check: Optional[dict] = None  # Codex only: ccusage counts vs the rollouts' own records
     tool_version: str = ""
     pricing_provenance: dict = field(default_factory=dict)
     # private-only fields (omitted from public exports)
@@ -64,13 +66,47 @@ def short_id(session_id):
     return hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:6]
 
 
+# Native ccusage builds that can run on each machine type Python reports on Windows. npm installs
+# the build for Node's process.arch, which differs from Python's when x64 and ARM64 installs are
+# mixed on Windows on Arm. x64 builds run there under emulation; an ARM64 build never runs on x64.
+# platform.machine() is the CPU (via WMI) on Python 3.12+, but an emulated x64 Python before 3.12
+# reports AMD64 on Arm, so it can refuse a usable ARM64 build; it never picks an unusable one.
+WIN_COMPATIBLE = {"arm64": ("arm64", "x64"), "aarch64": ("arm64", "x64"),
+                  "amd64": ("x64",), "x86_64": ("x64",)}
+
+
+def windows_binary(modules, machine):
+    """The installed ccusage.exe that runs on `machine`, preferring the native build."""
+    path = lambda arch: os.path.join(modules, "@ccusage", "ccusage-win32-" + arch, "bin", "ccusage.exe")
+    compatible = WIN_COMPATIBLE.get(machine.lower(), ())
+    for arch in compatible:
+        if os.path.isfile(path(arch)):
+            return path(arch)
+    installed = [a for a in ("x64", "arm64") if os.path.isfile(path(a))]
+    raise ReceiptError(
+        "ccusage binary not found for this machine (%s; runs: %s; installed: %s). Run `npm ci "
+        "--prefix \"%s\"` with a Node.js build for this machine, or set SESSION_RECEIPT_CCUSAGE "
+        "to a ccusage executable." % (machine, ", ".join(compatible) or "none",
+                                      ", ".join(installed) or "none", ROOT))
+
+
+def _default_binary():
+    modules = os.path.join(ROOT, "node_modules")
+    if os.name != "nt":
+        return os.path.join(modules, ".bin", "ccusage")
+    # On Windows .bin/ccusage is a POSIX shell shim. The ccusage npm launcher only forwards argv
+    # to its per-platform native binary, so call that .exe directly.
+    return windows_binary(modules, platform.machine())
+
+
 def find_binary():
     env = os.environ.get("SESSION_RECEIPT_CCUSAGE")
-    path = env or os.path.join(ROOT, "vendor", "node_modules", ".bin", "ccusage")
+    path = env or _default_binary()
     if not (os.path.isfile(path) and os.access(path, os.X_OK)):
         raise ReceiptError(
-            "ccusage binary not found at %s. Run `npm ci --prefix vendor` in the project "
-            "root, or set SESSION_RECEIPT_CCUSAGE to a ccusage executable." % path)
+            "ccusage binary not found at %s. Run `npm ci --prefix \"%s\"` (needs Node.js), or set "
+            "SESSION_RECEIPT_CCUSAGE to a ccusage executable. `session-receipt doctor` checks the "
+            "whole setup." % (path, ROOT))
     return path
 
 
@@ -84,7 +120,7 @@ def run_ccusage(args, claude_dir=None, codex_home=None, parse=True):
     if codex_home:
         env["CODEX_HOME"] = str(codex_home)
     try:
-        p = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=300)
+        p = subprocess.run(cmd, env=env, capture_output=True, encoding="utf-8", timeout=300)
     except subprocess.TimeoutExpired:
         raise ReceiptError("ccusage timed out")
     if p.returncode != 0:
@@ -161,7 +197,9 @@ def _finish_claude(r, models, session_cost, ver, prov):
     r.models = models
     r.unpriced = [m.name for m in models if m.cost_usd is None]
     t = _totals(models)
-    t["cost_usd"] = round(sum(m.cost_usd for m in models if m.cost_usd is not None), 12)
+    priced = [m.cost_usd for m in models if m.cost_usd is not None]
+    # Unknown price is never $0: with no priced model the total is unknown, as on the Codex path.
+    t["cost_usd"] = round(sum(priced), 12) if priced else None
     t["partial"] = bool(r.unpriced)
     t["total_tokens"] = t["input"] + t["output"] + t["cache_write"] + t["cache_read"]
     r.totals = t

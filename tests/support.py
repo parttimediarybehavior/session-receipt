@@ -19,7 +19,7 @@ _spec.loader.exec_module(mf)
 FIX = os.path.join(_tmp, "fixtures")
 mf.build(FIX)
 
-CCUSAGE_PRESENT = os.path.isfile(os.path.join(ROOT, "vendor", "node_modules", ".bin", "ccusage"))
+CCUSAGE_PRESENT = os.path.isfile(os.path.join(ROOT, "node_modules", ".bin", "ccusage"))
 
 
 def cli(*args, env=None):

@@ -10,28 +10,131 @@ Regenerate the examples with `python3 examples/build_docs.py --png`.
 A local command-line tool that turns your Claude Code (and, experimentally, Codex) usage logs
 into a nutrition-label style receipt: recorded token usage, an API-equivalent cost estimate,
 and (optionally) illustrative environmental scenarios. Accounting is plain deterministic code.
-There are no model calls, and receipts make no network calls (the one-time `npm ci` below
-downloads ccusage from the npm registry; `update-prices` downloads the price list, only when
-you run it).
+There are no model calls, and receipts make no network calls (installing downloads ccusage from
+the npm registry once; `update-prices` downloads the price list, only when you run it).
 
-## Install (from source)
+## Install
+
+You need Python 3.10 or later and Node.js (which includes npm). There is no `pip install` and no
+virtual environment to set up, except that on Windows Python also needs the `tzdata` package.
+
+### As a Claude Code plugin
+
+In Claude Code 2.1.275 or later:
+
+```
+/plugin install session-receipt --marketplace parttimediarybehavior/session-receipt
+```
+
+On older versions:
+
+```
+/plugin marketplace add parttimediarybehavior/session-receipt
+/plugin install session-receipt@session-receipt
+```
+
+Claude Code installs the pinned ccusage 20.0.38 (MIT) with the plugin. Then ask Claude for a
+receipt, or run `/session-receipt:receipt`. If something is missing, the skill runs
+`session-receipt doctor`, which checks Python, the time zone database and ccusage, and prints the
+exact fix for each problem. On Windows the first run usually asks for one extra command, which
+adds `tzdata` to your Python (see [Windows](#windows)).
+
+The plugin has no version number, so every new commit is an update. Turn on auto-update for the
+`session-receipt` marketplace in `/plugin`, or run `claude plugin update session-receipt@session-receipt`.
+Remove it with `claude plugin uninstall session-receipt@session-receipt`.
+
+### Without the plugin
+
+One line on macOS and Linux:
+
+```
+git clone https://github.com/parttimediarybehavior/session-receipt.git && npm ci --prefix session-receipt && session-receipt/bin/session-receipt doctor
+```
+
+One line on Windows (PowerShell):
+
+```
+git clone https://github.com/parttimediarybehavior/session-receipt.git; npm ci --prefix session-receipt; session-receipt\bin\session-receipt.cmd doctor
+```
+
+Then run `session-receipt/bin/session-receipt` (on Windows, `session-receipt\bin\session-receipt.cmd`),
+or add that `bin` folder to your PATH. To try it with synthetic data:
+`session-receipt/bin/session-receipt demo --out sr_demo --now 2026-01-06T12:00:00Z`. To remove it,
+delete the folder.
+
+### For development
 
 ```
 git clone https://github.com/parttimediarybehavior/session-receipt.git
 cd session-receipt
-npm ci --prefix vendor                 # installs the pinned ccusage 20.0.38 (MIT)
+npm ci
 python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/session-receipt demo --out /tmp/sr_demo --now 2026-01-06T12:00:00Z   # synthetic demo
+python3 -m unittest discover -s tests
 ```
 
-Editable/source install only; no wheel is published. Python 3.10+ standard library only, plus
-Node.js for `npm ci` (tested with Node 18.19). ccusage ships a native binary per platform
-(darwin/linux/win32, x64/arm64); **only Linux x64 has been tested.** For an offline machine, run
-`npm ci --prefix vendor` elsewhere and copy `vendor/node_modules/` across, or point
-`SESSION_RECEIPT_CCUSAGE` at an existing ccusage 20.0.38. Uninstall: `pip uninstall
-session-receipt` and delete the project directory (nothing is written outside it except the
-optional price-check cache in `~/.cache/session-receipt/`, or `$SESSION_RECEIPT_CACHE_DIR`).
-You can also run it without installing: `python3 -m session_receipt ...` from the project root.
+No wheel is published. The code uses the Python standard library only (plus `tzdata` on Windows).
+ccusage ships a native binary per platform (darwin/linux/win32, x64/arm64); **only Linux x64 and
+Windows 10 x64 have been tested on real logs** (Windows by hand on one machine; CI on Windows
+uses synthetic fixtures only; see [Windows](#windows)). For an offline machine, run `npm ci`
+elsewhere and copy `node_modules/` across, or point `SESSION_RECEIPT_CCUSAGE` at an existing
+ccusage 20.0.38. Nothing is written outside the project folder except receipts where you ask for
+them, the optional price-check cache in `~/.cache/session-receipt/` (or
+`$SESSION_RECEIPT_CACHE_DIR`), and the automatic receipts described under
+[Claude Code plugin](#claude-code-plugin).
+
+### Windows
+
+- Windows has no IANA time zone database, so Python needs the `tzdata` package. `session-receipt
+  doctor` prints the install command for the Python it uses, written for PowerShell. For example:
+
+  ```powershell
+  & "C:\Users\Jane Doe\AppData\Local\Programs\Python\Python313\python.exe" -m pip install --user tzdata
+  ```
+
+  The `&` lets PowerShell run a quoted path. In Command Prompt, leave out the `& `. A development
+  install (`pip install -e .`) adds `tzdata` for you. On macOS and Linux the system usually has the
+  database already; if not, doctor prints the same command for your shell, without the `&`.
+- Set `SESSION_RECEIPT_TZ` once, or pass `--tz`. Windows has no `/etc/timezone`, so otherwise the
+  default is `UTC`. [Report on real usage](#report-on-real-usage) shows the PowerShell command.
+- ccusage runs as the native `ccusage.exe` that npm installed under `node_modules/@ccusage/`.
+  npm picks the build for your Node.js (`process.arch`), which on Windows on Arm can differ from
+  your Python. If Python reports ARM64, the ARM64 build is used, or else the x64 build (Windows 11
+  on Arm runs x64 under emulation). If Python reports x64, only the x64 build is used; an ARM64
+  build is never picked. (Python 3.12+ reports the CPU; an x64 Python 3.10/3.11 running under
+  emulation on Arm reports x64.) If none fits, the error names what is installed: rerun `npm ci`
+  with a Node.js built for this machine, or set `SESSION_RECEIPT_CCUSAGE` to a ccusage executable.
+
+Automatic receipts (the SessionEnd hook, below) on Windows: opt in from PowerShell. The hook runs
+the CLI that came with it, so nothing else needs setting up:
+
+```
+New-Item -ItemType Directory -Force "$HOME\.config\session-receipt" | Out-Null
+New-Item -ItemType File -Force "$HOME\.config\session-receipt\auto-enabled" | Out-Null
+```
+
+To run a different copy instead, set `SESSION_RECEIPT_CMD` to a JSON array, for example
+`[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_CMD", (ConvertTo-Json -InputObject @("C:\Users\Jane Doe\sr\.venv\Scripts\session-receipt.exe") -Compress), "User")`,
+then close and reopen your terminal app: a user environment variable reaches only processes
+started after it is set.
+
+- Claude Code runs the hook as `node hooks-handlers/run_hook.js`, with no shell, so it works the
+  same whether Claude Code uses Git Bash or PowerShell. It needs Node.js on PATH, which installing
+  ccusage needs anyway. `run_hook.js` starts the hook with the first of `python3`, `python` and
+  `py -3` that is Python 3.10 or later. The python.org installer provides `python` and `py` but no
+  `python3`. A `python3` in `WindowsApps` is either a real Microsoft Store Python or a stub that
+  only prints a message; the hook skips a stub. If none of them starts, the hook exits 1 and
+  writes no receipt and no `hook.log`.
+- The hook detaches with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`, plus `CREATE_BREAKAWAY_FROM_JOB`
+  when its job allows it (it retries without breakaway otherwise). Windows CI runs the hook inside
+  real kill-on-close job objects that are closed as soon as the hook returns. With the kind libuv
+  (Node's process layer) gives each child it spawns, which has `SILENT_BREAKAWAY_OK`, the worker
+  survives. With a job that forbids breakaway, the hook falls back, and the worker runs while the
+  job stays open but is killed when it closes. The case in between (breakaway allowed, not silent),
+  where `CREATE_BREAKAWAY_FROM_JOB` is what saves the worker, is skipped on GitHub's runners because
+  their own job forbids breakaway, so it is untested. Which kind of job Claude Code uses has not
+  been checked directly. In real Claude Code sessions on one Windows machine (Windows 10 22H2
+  x64, Claude Code 2.1.302), the worker wrote its receipt both after `/exit` and after the terminal window
+  was closed.
 
 ## Try it with no real logs
 
@@ -40,6 +143,11 @@ python3 -m session_receipt demo --out /tmp/sr_demo --now 2026-01-06T12:00:00Z
 ```
 
 This builds synthetic fixtures (fake paths, fake content) and renders HTML, SVG and JSON.
+
+The examples here run from the project folder. Anywhere else, use the launcher in place of
+`python3 -m session_receipt`: `bin/session-receipt` (`bin\session-receipt.cmd` on Windows), or
+just `session-receipt` inside Claude Code with the plugin. On Windows, `python3` may not exist;
+`py -m session_receipt` works from the project folder.
 
 ## Report on real usage
 
@@ -54,6 +162,12 @@ Options: `--source claude|codex|both`, `--format html,svg,json`, `--out DIR` (de
 `--env`, `--private`, `--now ISO`, `--claude-dir` (a dir containing `projects/`),
 `--codex-home`. `--latest` means the most recent last activity within today and yesterday
 (or `--since/--until`). A missing session exits non-zero with a message.
+
+`--tz` defaults to `$SESSION_RECEIPT_TZ`, then `$TZ`, then the system zone (`/etc/timezone`, or
+the zone `/etc/localtime` links to, as on macOS and Fedora), else `UTC`. Automatic receipts
+(the hook, below) use the same default. Windows has neither file, so set `SESSION_RECEIPT_TZ`
+there (`[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_TZ", "America/Chicago", "User")`)
+rather than `TZ`, which other Windows programs read in a different format.
 
 ## Offline
 
@@ -79,6 +193,30 @@ disagreement there stays on the receipt as a warning. The receipt footer says
 five rate types, so no overrides were needed. OpenRouter passes Anthropic's list prices through;
 a spot check against Anthropic's pricing page that day agreed. The tool never writes under `~/.claude` or `~/.codex`.
 
+**If an update fails.** All three files are first built in a staging directory,
+`pricing/.update-*`, the ccusage probes run against that staged copy, and the staged files are
+read back. A download or parse error, a missing or failing ccusage, or any probe error stops
+there, and the active files stay byte-identical. Only then are the files swapped in, one
+`os.replace` per file. Each file is replaced whole, so a reader never sees a half-written file,
+but the three are not replaced together. If one replace fails or is interrupted with Ctrl-C,
+every file it reached is put back from copies taken just before, and the command reports that
+nothing changed. If putting one back also fails or is interrupted, the error names the staging
+directory, which keeps the previous files in `previous/`, and you copy them back yourself. The
+staging directory is deleted only after a success or a complete rollback, so one left behind
+after an interrupt may hold the only old copies; delete it once the active files are right.
+What this does not cover:
+
+- A process that is killed, or a machine that loses power, during the swap leaves a mix of old
+  and new files. The swap takes milliseconds. Re-run `update-prices` to finish it, or copy back
+  the files under `pricing/.update-*/previous/`.
+- A receipt made at the same moment can read an old file next to a new one. Its price check
+  then shows a mismatch, and its provenance records the reference date and the overrides hash
+  it actually used.
+- Two `update-prices` runs at the same time are not locked against each other.
+- On Windows, a file another program has open can refuse the replace. That normally ends in
+  the "restored, nothing changed" case above; close it and retry. The Windows behaviour of this
+  path is reasoned from how `os.replace` works there, not tested on Windows.
+
 ## How to read the receipt
 
 - **A. Recorded usage**: tokens per model as recorded: output (including thinking/reasoning),
@@ -91,7 +229,9 @@ a spot check against Anthropic's pricing page that day agreed. The tool never wr
   litres of water and kg CO2e. These are illustrative scenarios built from cited estimates and
   flagged assumptions. None is measured and they are not bounds. Sources: `session_receipt/SOURCES.md`.
 - **Where the numbers came from**: ccusage version, price table date and check status, timezone,
-  generation time. Counts include subagents; streamed duplicates are removed.
+  generation time. Claude Code counts include subagents, and streamed duplicates are removed.
+  Each Codex subagent thread is its own rollout, so it gets its own Codex session receipt and is
+  not part of its parent's; Codex daily receipts include every thread.
 - **PROVISIONAL** appears when the last activity is within 2 minutes of generation time, or the
   window includes today.
 - **Price check**: `pricecheck` measures the rates ccusage actually applies (five probe
@@ -116,6 +256,27 @@ always escaped before they reach HTML or SVG.
   Codex prices are not checked against the snapshot yet, so they read "unverified". A model
   ccusage cannot price reads "unknown" and the subtotal is partial (or unknown if no model in
   it is priced). Allocating cost across models is never guessed.
+- Codex count check: ccusage 20.0.38 to 20.0.44 can drop a spawned subagent thread's usage
+  ([ccusage#1970](https://github.com/ccusage/ccusage/issues/1970): a one-response subagent whose
+  `token_count` event is written twice). Newer Codex rollouts record every response in a
+  `token_usage_record` line, so Codex receipts add those up (token numbers and timestamps only)
+  and compare. The counts and cost stay ccusage's. JSON carries `count_check` with a `status`:
+  - `undercount`: the logs record tokens ccusage did not count. The receipt says so, and
+    `totals.partial` is true because the counts and cost are a lower bound. If ccusage counted
+    nothing for a day, the daily receipt still gets a Codex block showing 0 and the gap.
+  - `mismatch`: ccusage counted more than the records show, so the extra could not be checked.
+  - `incomplete`: some records near that day or session could not be read or dated. A bad
+    record is skipped and counted; it never stops the receipt.
+  - `ok`: they agree. `not_checked`: older rollouts with no such records.
+
+  This is the one place the tool reads a raw log itself.
+- Ambiguous records are counted as ccusage counts them, not reinterpreted:
+  - A **model fallback** record (top-level model is the fallback, `iterations` show a failed
+    first attempt on another model) is booked to the fallback model, including the cache writes
+    in its `cache_creation` breakdown; the first attempt's usage is not counted. The log does not
+    say whether that attempt was billed.
+  - A message whose duplicate copies **straddle local midnight** goes to the day of the copy
+    kept (the one with the largest output; on a tie, the first copy).
 - **Turn-level attribution: not supported.** Usage is recorded per streamed API message, not
   per user turn; a turn spans several messages and subagents, and ccusage exposes no turn
   boundaries. Task attribution across sessions is also out of scope.
@@ -124,9 +285,9 @@ always escaped before they reach HTML or SVG.
 - Long-prompt tiers (e.g. haiku-5-5 above 100K) are applied by ccusage and recorded in the
   reference, but the price check probes only the standard tier.
 
-## Claude Code plugin (optional)
+## Claude Code plugin
 
-`integrations/claude-code/session-receipt/` is a Claude Code plugin with:
+The repository is itself a Claude Code plugin and its own marketplace (see [Install](#install)). It has:
 
 - a `/session-receipt:receipt` skill: asks Claude to run this CLI for the current session
   (`${CLAUDE_SESSION_ID}`), today, or a date. Claude reports what the CLI printed; it does not
@@ -139,11 +300,29 @@ always escaped before they reach HTML or SVG.
   the transcript to stop changing. It never calls a model or starts Claude Code, so it cannot
   trigger a turn; a nested-run guard (`SESSION_RECEIPT_IN_HOOK`) stops recursion. Receipts and
   `hook.log` go to the plugin data dir (`$CLAUDE_PLUGIN_DATA`) or `~/.local/share/session-receipt/`.
-  It needs `session-receipt` on PATH (`pip install -e .`) or `SESSION_RECEIPT_CMD`.
+  Claude Code starts it with `node`, with no shell, and it runs with the first of `python3`,
+  `python` and `py -3` that is Python 3.10 or later. It runs the CLI that came with it. To run a
+  different copy, set `SESSION_RECEIPT_CMD`, which is never run through a shell. It is read by its
+  syntax alone, never by which files exist, as one of:
+  - a JSON array of strings (recommended; any part may contain spaces):
+    `["/opt/my tools/python3", "-m", "session_receipt"]`
+  - the whole value in double quotes: one executable path, spaces allowed, no arguments:
+    `"C:\Users\Jane Doe\session-receipt\.venv\Scripts\session-receipt.exe"`
+  - one word: an executable name or a path without spaces: `/opt/sr/bin/session-receipt`
+  - several words whose first word is not an absolute path, split on spaces: `python3 /opt/sr/cli.py`
 
-Try it without installing: `claude --plugin-dir integrations/claude-code/session-receipt`.
-Remove it by dropping that flag (or `claude plugin uninstall` if you installed it). The plugin
-never edits your settings or hooks. Hook tests: `python3 -m unittest discover -s integrations/claude-code/tests`.
+  Anything else is refused and nothing runs. That includes an absolute path followed by more words,
+  which could be one path with spaces, and quotes that do not wrap the whole value. **Migration:**
+  the earlier form `/usr/bin/python3 /opt/sr/cli.py` (an absolute path plus arguments) is now
+  refused. Write it as `["/usr/bin/python3", "/opt/sr/cli.py"]`. A refused value, or an executable
+  that cannot start (for example, a quoted path that does not exist), is logged to `hook.log`. So
+  is hook input that is not a JSON object, once automatic receipts are on.
+
+- a `bin/session-receipt` launcher, which Claude Code puts on the Bash tool's PATH. It runs the CLI
+  from the plugin folder with no `pip install`.
+
+Try a checkout without installing: `claude --plugin-dir .` from the project folder (run `npm ci`
+there first). Remove it by dropping that flag. The plugin never edits your settings or hooks.
 
 Codex: no skill or hook is provided. Codex *reports* (above) are a separate capability from
 any automatic Codex integration, which is not built.
@@ -165,5 +344,6 @@ snapshot (see above) rather than a hand-written table.
 python3 -m unittest discover -s tests -v
 ```
 
-Tests use synthetic fixtures only (`examples/make_fixtures.py`, compact JSON because ccusage
-silently ignores non-compact lines).
+Tests use synthetic fixtures only, generated into a temp dir at test time (`examples/make_fixtures.py`,
+compact JSON because ccusage silently ignores non-compact lines). On Windows, which forbids `<` and `>`
+in file names, the hostile-path fixture uses `&` and `'` instead of `<img src=x>`.

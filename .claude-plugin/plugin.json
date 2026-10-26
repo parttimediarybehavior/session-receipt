@@ -1,0 +1,8 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "session-receipt",
+  "description": "On-demand usage receipts for Claude Code sessions (tokens, API-equivalent cost, optional environmental scenarios). Deterministic local code; no model calls.",
+  "author": { "name": "Session Receipt contributors" },
+  "repository": "https://github.com/parttimediarybehavior/session-receipt",
+  "license": "MIT"
+}
