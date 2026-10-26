@@ -110,14 +110,13 @@ To run a different copy instead, set `SESSION_RECEIPT_CMD` to a JSON array, for 
 then close and reopen your terminal app: a user environment variable reaches only processes
 started after it is set.
 
-- The hook runs through Claude Code's shell (Git Bash) with the first of `python3`, `python` and
+- Claude Code runs the hook as `node hooks-handlers/run_hook.js`, with no shell, so it works the
+  same whether Claude Code uses Git Bash or PowerShell. It needs Node.js on PATH, which installing
+  ccusage needs anyway. `run_hook.js` starts the hook with the first of `python3`, `python` and
   `py -3` that is Python 3.10 or later. The python.org installer provides `python` and `py` but no
   `python3`. A `python3` in `WindowsApps` is either a real Microsoft Store Python or a stub that
   only prints a message; the hook skips a stub. If none of them starts, the hook exits 1 and
   writes no receipt and no `hook.log`.
-- The hook command is written for Git Bash, which Claude Code uses as its shell on Windows when
-  Git for Windows is installed. Without Git Bash, Claude Code runs hooks in PowerShell, and the hook
-  does not run.
 - The hook detaches with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`, plus `CREATE_BREAKAWAY_FROM_JOB`
   when its job allows it (it retries without breakaway otherwise). Windows CI runs the hook inside
   real kill-on-close job objects that are closed as soon as the hook returns. With the kind libuv
@@ -236,10 +235,10 @@ The repository is itself a Claude Code plugin and its own marketplace (see [Inst
   the transcript to stop changing. It never calls a model or starts Claude Code, so it cannot
   trigger a turn; a nested-run guard (`SESSION_RECEIPT_IN_HOOK`) stops recursion. Receipts and
   `hook.log` go to the plugin data dir (`$CLAUDE_PLUGIN_DATA`) or `~/.local/share/session-receipt/`.
-  The hook itself runs with the first of `python3`, `python` and `py -3` that is Python 3.10 or
-  later, and runs the CLI that came with it. To run a different copy, set `SESSION_RECEIPT_CMD`,
-  which is never run through a shell. It is read by its syntax alone, never by which files exist,
-  as one of:
+  Claude Code starts it with `node`, with no shell, and it runs with the first of `python3`,
+  `python` and `py -3` that is Python 3.10 or later. It runs the CLI that came with it. To run a
+  different copy, set `SESSION_RECEIPT_CMD`, which is never run through a shell. It is read by its
+  syntax alone, never by which files exist, as one of:
   - a JSON array of strings (recommended; any part may contain spaces):
     `["/opt/my tools/python3", "-m", "session_receipt"]`
   - the whole value in double quotes: one executable path, spaces allowed, no arguments:
