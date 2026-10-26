@@ -79,6 +79,20 @@ def scope_lines(r, private):
     return head, detail
 
 
+def counts_scope(receipts):
+    """What the counts include, per source. Claude subagent transcripts belong to their session;
+    each Codex subagent thread is its own rollout, so ccusage makes it a separate session."""
+    bits = []
+    if any(r.source == "claude" for r in receipts):
+        bits.append("Claude Code counts include subagents; streamed duplicates removed.")
+    codex = [r for r in receipts if r.source == "codex"]
+    if any(r.kind == "session" for r in codex):
+        bits.append("Codex subagent threads are separate sessions, not included in a Codex session receipt.")
+    elif codex:
+        bits.append("Codex daily counts include subagent threads.")
+    return " ".join(bits)
+
+
 class Canvas:
     def __init__(self):
         self.parts = []
@@ -159,6 +173,18 @@ def _block(c, r, private, show_env, notes):
     if r.source == "codex":
         c.line("of which reasoning: %s (already inside Output; not added again)"
                % fmt_int(t.get("reasoning", 0)), 10, fill="#444")
+        cc = r.count_check or {}
+        if cc.get("status") == "undercount":
+            c.wrapped("undercount: the Codex logs record %s tokens that ccusage did not count (a ccusage "
+                      "gap seen with some subagent threads). The counts and cost on this receipt exclude them."
+                      % fmt_int(cc["missing_tokens"]), 96, size=10, weight="bold")
+        elif cc.get("status") == "mismatch":
+            c.wrapped("count check: ccusage counted %s more tokens than the Codex logs' per-response records "
+                      "show, so those could not be checked." % fmt_int(cc.get("extra_tokens", 0)),
+                      96, size=10, fill="#444")
+        elif cc.get("status") == "incomplete":
+            c.wrapped("count check incomplete: %s Codex log record(s) could not be read or dated."
+                      % fmt_int(cc.get("skipped_records", 0)), 96, size=10, fill="#444")
     c.line("Counts are tokens as recorded in local logs, per provider; not comparable across providers.",
            10, fill="#444")
     c.y += 8
@@ -251,7 +277,7 @@ def render_svg(receipts, generated_at, private=False, show_env=False):
     r0 = receipts[0]
     prov = r0.pricing_provenance
     status = pricecheck.summary_status(receipts)
-    c.wrapped("Counts: %s. Counts include subagents; streamed duplicates removed." % r0.tool_version, size=10)
+    c.wrapped("Counts: %s. %s" % (r0.tool_version, counts_scope(receipts)), size=10)
     c.wrapped("Prices: checked against the %s as of %s: %s. Codex/OpenAI prices are not checked yet "
               "and are unverified." % (prov.get("source", "?"), prov.get("as_of", "?"), status), size=10)
     c.wrapped("Timezone: %s. Generated at: %s." % (r0.tz, generated_at), size=10)

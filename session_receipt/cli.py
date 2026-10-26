@@ -8,7 +8,7 @@ from datetime import timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import ccusage_adapter as ad
-from . import export_json, pricecheck, prices, render_html, render_svg
+from . import codex_check, export_json, pricecheck, prices, render_html, render_svg
 from .ccusage_adapter import ReceiptError
 
 
@@ -120,10 +120,20 @@ def select_sessions(args, now):
         if hits and (since or until):
             full = {r.session_id: r for r in _fetch_sessions(src, args, tz, None, None)}
             hits = [full[r.session_id] for r in hits]
+        if src == "codex":
+            for r in hits:
+                codex_check.check_session(r, args.codex_home)
         found += hits
     if not found:
         if args.id:
-            raise NotFound("session %r not found in source(s): %s" % (args.id, ", ".join(_sources(args))))
+            extra = ""
+            if "codex" in _sources(args):
+                n = codex_check.uncounted_session(args.id, args.codex_home)
+                if n:
+                    extra = ("; the Codex logs record %s tokens for it, which ccusage did not count "
+                             "(see ccusage/ccusage#1970); a daily receipt for that day shows the gap"
+                             % "{:,}".format(n))
+            raise NotFound("session %r not found in source(s): %s%s" % (args.id, ", ".join(_sources(args)), extra))
         raise NotFound("no sessions found for %s to %s (source(s): %s). Pass --since/--until or "
                        "--claude-dir/--codex-home." % (since, until, ", ".join(_sources(args))))
     return found
@@ -137,7 +147,17 @@ def select_daily(args):
             days = ad.fetch_claude_daily(tz, args.date, args.date, claude_dir=args.claude_dir)
         else:
             days = ad.fetch_codex_daily(tz, args.date, args.date, codex_home=args.codex_home)
-        found += [d for d in days if d.window_start == args.date]
+        hits = [d for d in days if d.window_start == args.date]
+        if src == "codex":
+            day_sessions = ad.fetch_codex_sessions(tz, args.date, args.date, codex_home=args.codex_home)
+            if not hits and codex_check.day_log(args.date, tz, args.codex_home)[0]:
+                # ccusage counted nothing, but the logs record usage: say so on the receipt itself
+                empty = ad.Receipt(kind="daily", source="codex", label="one day, %s, %s" % (args.date, tz),
+                                   tz=tz, window_start=args.date, window_end=args.date)
+                hits = [ad._finish_codex(empty, [], None, ad.tool_version(), ad.provenance())]
+            for d in hits:
+                codex_check.check_daily(d, day_sessions, args.codex_home)
+        found += hits
     if not found:
         raise NotFound("no usage recorded for %s (%s) in source(s): %s"
                        % (args.date, tz, ", ".join(_sources(args))))
