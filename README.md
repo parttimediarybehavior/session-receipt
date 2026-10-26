@@ -57,16 +57,17 @@ Automatic receipts (the SessionEnd hook, below) on Windows, in PowerShell from t
 with spaces are fine:
 
 ```
-# Where the hook finds the CLI. The value is stored without quotes.
-[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_CMD", (Resolve-Path .venv\Scripts\session-receipt.exe).Path, "User")
+# Where the hook finds the CLI, as a JSON array: ["C:\\Users\\Jane Doe\\...\\session-receipt.exe"]
+$cli = (Resolve-Path .venv\Scripts\session-receipt.exe).Path
+[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_CMD", (ConvertTo-Json -InputObject @($cli) -Compress), "User")
 # Opt in.
 New-Item -ItemType Directory -Force "$HOME\.config\session-receipt" | Out-Null
 New-Item -ItemType File -Force "$HOME\.config\session-receipt\auto-enabled" | Out-Null
 ```
 
 Close and reopen your terminal app before starting Claude Code: a user environment variable
-reaches only processes started after it is set. To pass arguments, use the JSON form, with forward
-slashes (or `\\`) in paths: `'["C:/Users/Jane Doe/session-receipt/.venv/Scripts/python.exe", "-m", "session_receipt"]'`.
+reaches only processes started after it is set. Arguments go in the same array, for example
+`ConvertTo-Json -InputObject @("C:\Users\Jane Doe\session-receipt\.venv\Scripts\python.exe", "-m", "session_receipt") -Compress`.
 
 - The hook command is `python3`, run through Claude Code's shell (Git Bash), so `python3` must
   resolve to a real Python there (`command -v python3 && python3 --version` in Git Bash). The
@@ -188,14 +189,19 @@ always escaped before they reach HTML or SVG.
   trigger a turn; a nested-run guard (`SESSION_RECEIPT_IN_HOOK`) stops recursion. Receipts and
   `hook.log` go to the plugin data dir (`$CLAUDE_PLUGIN_DATA`) or `~/.local/share/session-receipt/`.
   It needs `session-receipt` on PATH (`pip install -e .`) or `SESSION_RECEIPT_CMD`, which is never
-  run through a shell and takes one of three forms:
-  - a JSON array of strings, the general form, where any part may contain spaces:
+  run through a shell. It is read by its syntax alone, never by which files exist, as one of:
+  - a JSON array of strings (recommended; any part may contain spaces):
     `["/opt/my tools/python3", "-m", "session_receipt"]`
-  - an absolute path to the executable, spaces allowed, double quotes optional:
-    `C:\Users\Jane Doe\session-receipt\.venv\Scripts\session-receipt.exe`
-  - words separated by spaces, none containing a space (the original form): `python3 /opt/sr/cli.py`
+  - the whole value in double quotes: one executable path, spaces allowed, no arguments:
+    `"C:\Users\Jane Doe\session-receipt\.venv\Scripts\session-receipt.exe"`
+  - one word: an executable name or a path without spaces: `/opt/sr/bin/session-receipt`
+  - several words whose first word is not an absolute path, split on spaces: `python3 /opt/sr/cli.py`
 
-  A malformed value, or an executable that cannot start, is logged to `hook.log`.
+  Anything else is refused and nothing runs. That includes an absolute path followed by more words,
+  which could be one path with spaces, and quotes that do not wrap the whole value. **Migration:**
+  the earlier form `/usr/bin/python3 /opt/sr/cli.py` (an absolute path plus arguments) is now
+  refused. Write it as `["/usr/bin/python3", "/opt/sr/cli.py"]`. A refused value, or an executable
+  that cannot start (for example, a quoted path that does not exist), is logged to `hook.log`.
 
 Try it without installing: `claude --plugin-dir integrations/claude-code/session-receipt`.
 Remove it by dropping that flag (or `claude plugin uninstall` if you installed it). The plugin

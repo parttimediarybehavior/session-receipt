@@ -36,12 +36,21 @@ def enabled():
     return os.environ.get("SESSION_RECEIPT_AUTO") == "1" or os.path.exists(os.path.join(c, "auto-enabled"))
 
 
+def _looks_absolute(word):
+    """Syntax only, the same on every OS: /x, \\x, \\\\server\\share, C:\\x, C:/x."""
+    return word[:1] in ("/", "\\") or (len(word) > 2 and word[0].isalpha() and word[1] == ":"
+                                        and word[2] in "/\\")
+
+
 def cli_cmd():
-    """The argv prefix that runs the CLI; never run through a shell. SESSION_RECEIPT_CMD is one of:
-    - a JSON array of strings, the general form: ["C:/Users/Jane Doe/.venv/Scripts/python.exe", "-m", "session_receipt"]
-    - an absolute path to an existing executable, spaces allowed, optionally in double quotes
-    - words separated by whitespace, none containing a space: python3 /opt/sr/cli.py
-    Unset: `session-receipt` on PATH. Raises ValueError for a malformed JSON array."""
+    """The argv prefix that runs the CLI. Never run through a shell, and decided by syntax alone,
+    never by which files exist. SESSION_RECEIPT_CMD is one of:
+    - a JSON array of strings (recommended): ["C:\\\\Users\\\\Jane Doe\\\\.venv\\\\Scripts\\\\session-receipt.exe"]
+    - the whole value in double quotes: one executable path, used as is, no arguments
+    - one word: an executable name or path without spaces
+    - several words, the first not an absolute path: split on whitespace (python3 /opt/sr/cli.py)
+    Unset: `session-receipt` on PATH. Raises ValueError for anything else, including an absolute
+    path followed by more words, which could be a path with spaces (use a JSON array)."""
     cmd = os.environ.get("SESSION_RECEIPT_CMD", "").strip()
     if not cmd:
         exe = shutil.which("session-receipt")
@@ -54,10 +63,18 @@ def cli_cmd():
         if not (isinstance(argv, list) and argv and all(isinstance(a, str) and a for a in argv)):
             raise ValueError("SESSION_RECEIPT_CMD must be a JSON array of non-empty strings")
         return argv
-    path = cmd[1:-1] if len(cmd) > 1 and cmd[0] == cmd[-1] == '"' else cmd
-    if os.path.isabs(path) and os.path.isfile(path):
-        return [path]
-    return cmd.split()
+    if len(cmd) > 1 and cmd[0] == cmd[-1] == '"' and '"' not in cmd[1:-1]:
+        if not cmd[1:-1].strip():
+            raise ValueError("SESSION_RECEIPT_CMD is an empty quoted path")
+        return [cmd[1:-1]]
+    if '"' in cmd:
+        raise ValueError("SESSION_RECEIPT_CMD has double quotes that do not wrap the whole value; "
+                         "use a JSON array")
+    words = cmd.split()
+    if len(words) > 1 and _looks_absolute(words[0]):
+        raise ValueError("SESSION_RECEIPT_CMD is ambiguous: an absolute path followed by more words "
+                         "may be a path with spaces; use a JSON array")
+    return words
 
 
 def wait_stable(path):
