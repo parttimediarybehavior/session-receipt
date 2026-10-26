@@ -140,11 +140,17 @@ def check_session(r, codex_home=None):
     return _apply(r, _result(log, {path: r.totals.get("total_tokens", 0)}, None, fr.skipped))
 
 
+def rollout_matches(rel, ident):
+    """Does a rollout's path under sessions/ (without .jsonl) start with session id `ident`?
+    Ids use "/"; relpath uses "\\" on Windows, so both are compared with "/"."""
+    return rel.replace("\\", "/").startswith(ident.replace("\\", "/"))
+
+
 def uncounted_session(ident, codex_home=None):
     """Tokens recorded in a rollout that ccusage did not list at all, matched by session id prefix."""
     base = sessions_dir(codex_home)
     hits = [p for p in glob.glob(os.path.join(base, "**", "*.jsonl"), recursive=True)
-            if os.path.relpath(p, base)[:-6].startswith(ident)]
+            if rollout_matches(os.path.relpath(p, base)[:-6], ident)]
     return sum(FileRecords(p).total for p in hits) if len(hits) == 1 else 0
 
 

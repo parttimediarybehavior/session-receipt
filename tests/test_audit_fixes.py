@@ -208,6 +208,14 @@ class F2CodexCountCheck(unittest.TestCase):
         self.assertIsNone(parse_time("2026-13-45T99:00:00Z"))
         self.assertIsNone(parse_time(12345))
 
+    def test_rollout_match_ignores_path_separator(self):
+        from session_receipt.codex_check import rollout_matches
+        self.assertTrue(rollout_matches("2026\\01\\05\\rollout-x", "2026/01/05/rollout-x"))  # Windows relpath
+        self.assertTrue(rollout_matches("2026\\01\\05\\rollout-x", "2026/01/05/roll"))
+        self.assertTrue(rollout_matches("2026/01/05/rollout-x", "2026\\01\\05"))
+        self.assertTrue(rollout_matches("2026/01/05/rollout-x", "2026/01/05/rollout-x"))
+        self.assertFalse(rollout_matches("2026\\01\\05\\rollout-x", "2026/01/06"))
+
     def test_legacy_rollout_without_records_is_not_checked(self):
         from tests.support import fx
         r, j, visible, _ = run("session", "--source", "codex", "--id", "2026/01/05",
