@@ -11,7 +11,7 @@ import json, os, re, subprocess, sys, tempfile, unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from tests.support import CCUSAGE_PRESENT  # noqa: E402
+from tests.support import CCUSAGE_PRESENT, read  # noqa: E402
 
 PARENT = "11111111-0000-4000-8000-000000000000"
 CHILD = "22222222-0000-4000-8000-000000000000"
@@ -83,7 +83,7 @@ def run(*args):
                        env=dict(os.environ))
     if r.returncode:
         return r, None, None, None
-    get = lambda ext: open(os.path.join(out, next(n for n in os.listdir(out) if n.endswith(ext))), encoding="utf-8").read()
+    get = lambda ext: read(os.path.join(out, next(n for n in os.listdir(out) if n.endswith(ext))))
     svg = get(".svg")
     return r, json.loads(get(".json")), " ".join(re.findall(r"<text[^>]*>([^<]*)</text>", svg)), get(".html")
 
