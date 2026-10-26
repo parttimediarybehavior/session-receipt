@@ -99,6 +99,22 @@ def wait_stable(path):
     return False
 
 
+def read_event(stream):
+    """The hook's JSON input as a dict, or None. A UTF-8 byte-order mark is allowed: PowerShell can
+    add one when text is piped in by hand."""
+    try:
+        event = json.loads(stream.read().decode("utf-8-sig"))
+    except Exception:
+        return None
+    return event if isinstance(event, dict) else None
+
+
+def log_line(msg):
+    os.makedirs(data_dir(), exist_ok=True)
+    with open(os.path.join(data_dir(), "hook.log"), "a") as fh:
+        fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} {msg}\n")
+
+
 def worker(event):
     sid = event.get("session_id") or ""
     out = os.path.join(data_dir(), "receipts")
@@ -155,11 +171,11 @@ def main():
         return worker(json.loads(os.environ.pop("SESSION_RECEIPT_HOOK_EVENT", "{}")))
     if os.environ.get("SESSION_RECEIPT_IN_HOOK") == "1":
         return 0  # nested run: never recurse
-    try:
-        event = json.load(sys.stdin)
-    except Exception:
-        return 0
     if not enabled():
+        return 0
+    event = read_event(sys.stdin.buffer)
+    if event is None:  # say so: a silent exit would look like a disabled hook
+        log_line("hook input is not a JSON object; skipped")
         return 0
     if os.environ.get("SESSION_RECEIPT_FOREGROUND") == "1":  # tests only
         return worker(event)
