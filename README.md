@@ -73,10 +73,13 @@ slashes (or `\\`) in paths: `'["C:/Users/Jane Doe/session-receipt/.venv/Scripts/
   Microsoft Store alias in `WindowsApps` only prints a message.
 - The hook detaches with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`, plus `CREATE_BREAKAWAY_FROM_JOB`
   when its job allows it (it retries without breakaway otherwise). Windows CI runs the hook inside
-  real job objects of each kind. The worker survives the closing of a kill-on-close job that allows
-  breakaway, including the kind libuv (Node's process layer) gives its children. It does not survive
-  the closing of a kill-on-close job that forbids breakaway. Which kind Claude Code uses, and whether
-  it kills process trees at exit, has not been checked inside a real Claude Code session on Windows.
+  real kill-on-close job objects that are closed as soon as the hook returns. With the kind libuv
+  (Node's process layer) gives each child it spawns, which has `SILENT_BREAKAWAY_OK`, the worker
+  survives. With a job that forbids breakaway, the hook falls back, and the worker runs while the
+  job stays open but is killed when it closes. The case in between (breakaway allowed, not silent),
+  where `CREATE_BREAKAWAY_FROM_JOB` is what saves the worker, is skipped on GitHub's runners because
+  their own job forbids breakaway, so it is untested. Which kind Claude Code uses, and whether it
+  kills process trees at exit, has not been checked inside a real Claude Code session on Windows.
 
 ## Try it with no real logs
 
