@@ -6,7 +6,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=\"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session_end.py\"; for p in python3 python 'py -3'; do $p -c 'import sys; sys.exit(sys.version_info[0] != 3)' </dev/null >/dev/null 2>&1 && exec $p \"$f\"; done; echo \"session-receipt: no Python 3 found (tried python3, python, py -3)\" >&2; exit 1",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/run_hook.js"
+            ],
             "timeout": 5
           }
         ]

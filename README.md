@@ -69,11 +69,13 @@ Close and reopen your terminal app before starting Claude Code: a user environme
 reaches only processes started after it is set. Arguments go in the same array, for example
 `ConvertTo-Json -InputObject @("C:\Users\Jane Doe\session-receipt\.venv\Scripts\python.exe", "-m", "session_receipt") -Compress`.
 
-- The hook runs through Claude Code's shell (Git Bash) with the first of `python3`, `python` and
-  `py -3` that starts Python 3. The python.org installer provides `python` and `py` but no
-  `python3`. A `python3` in `WindowsApps` is either a real Microsoft Store Python or a stub that
-  only prints a message; the hook skips a stub. If none of them starts, the hook exits 1 and
-  writes no receipt and no `hook.log`.
+- Claude Code runs the hook as `node hooks-handlers/run_hook.js`, with no shell, so it works the
+  same whether Claude Code uses Git Bash or PowerShell. It needs Node.js on PATH, which installing
+  ccusage needs anyway. `run_hook.js` starts the hook with the first of `python3`, `python` and
+  `py -3` that is Python 3. The python.org installer provides `python` and `py` but no `python3`.
+  A `python3` in `WindowsApps` is either a real Microsoft Store Python or a stub that only prints a
+  message; the hook skips a stub. If none of them starts, the hook exits 1 and writes no receipt
+  and no `hook.log`.
 - The hook detaches with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`, plus `CREATE_BREAKAWAY_FROM_JOB`
   when its job allows it (it retries without breakaway otherwise). Windows CI runs the hook inside
   real kill-on-close job objects that are closed as soon as the hook returns. With the kind libuv
@@ -192,7 +194,8 @@ always escaped before they reach HTML or SVG.
   the transcript to stop changing. It never calls a model or starts Claude Code, so it cannot
   trigger a turn; a nested-run guard (`SESSION_RECEIPT_IN_HOOK`) stops recursion. Receipts and
   `hook.log` go to the plugin data dir (`$CLAUDE_PLUGIN_DATA`) or `~/.local/share/session-receipt/`.
-  The hook itself runs with the first of `python3`, `python` and `py -3` that starts Python 3.
+  Claude Code starts it with `node`, with no shell, and it runs with the first of `python3`,
+  `python` and `py -3` that is Python 3.
   It needs `session-receipt` on PATH (`pip install -e .`) or `SESSION_RECEIPT_CMD`, which is never
   run through a shell. It is read by its syntax alone, never by which files exist, as one of:
   - a JSON array of strings (recommended; any part may contain spaces):

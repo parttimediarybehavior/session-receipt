@@ -296,20 +296,33 @@ class SpacedCommandLaunch(HookFixture):
 
 
 PLUGIN = os.path.join(os.path.dirname(__file__), "..", "session-receipt")
-SH = shutil.which("sh") or next((p for p in (r"C:\Program Files\Git\bin\sh.exe",) if os.path.exists(p)), None)
+NODE = shutil.which("node")
 
 
-@unittest.skipUnless(SH, "needs sh (Git Bash on Windows)")
-class HooksJsonInterpreter(unittest.TestCase):
-    """hooks.json runs the first of python3, python, `py -3` that is Python 3. Fake interpreters on
+def hook_launcher():
+    """The exec-form command hooks.json gives Claude Code, with ${CLAUDE_PLUGIN_ROOT} filled in."""
+    with open(os.path.join(PLUGIN, "hooks", "hooks.json")) as f:
+        h = json.load(f)["hooks"]["SessionEnd"][0]["hooks"][0]
+    return [h["command"]] + [a.replace("${CLAUDE_PLUGIN_ROOT}", PLUGIN) for a in h["args"]]
+
+
+class HooksJsonCommand(unittest.TestCase):
+    def test_exec_form_with_node(self):  # no shell, so it runs the same under Git Bash and PowerShell
+        argv = hook_launcher()
+        self.assertEqual(argv[0], "node")
+        self.assertTrue(argv[1].endswith("/hooks-handlers/run_hook.js") and os.path.isfile(argv[1]), argv)
+
+
+@unittest.skipUnless(NODE, "needs node")
+@unittest.skipIf(os.name == "nt", "the fake interpreters are shell scripts; HookLauncherRealPython covers Windows")
+class HookInterpreterChoice(unittest.TestCase):
+    """run_hook.js starts the first of python3, python, `py -3` that is Python 3. Fake interpreters on
     an otherwise empty PATH record what ran; a stub (like the WindowsApps one) fails every call."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.bin = os.path.join(self.tmp, "bin"); os.makedirs(self.bin)
         self.record = os.path.join(self.tmp, "record")
-        with open(os.path.join(PLUGIN, "hooks", "hooks.json")) as f:
-            self.command = json.load(f)["hooks"]["SessionEnd"][0]["hooks"][0]["command"]
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -327,9 +340,8 @@ class HooksJsonInterpreter(unittest.TestCase):
         os.chmod(path, 0o755)
 
     def run_command(self):
-        env = {k: v for k, v in os.environ.items() if k in ("SYSTEMROOT", "TEMP", "TMP")}
-        env.update(PATH=self.bin, CLAUDE_PLUGIN_ROOT=PLUGIN, SR_RECORD=self.record)
-        r = subprocess.run([SH, "-c", self.command], input='{"session_id": "x"}\n', env=env,
+        env = {"PATH": self.bin, "SR_RECORD": self.record}
+        r = subprocess.run([NODE] + hook_launcher()[1:], input='{"session_id": "x"}\n', env=env,
                            capture_output=True, text=True, timeout=30)
         ran = None
         if os.path.exists(self.record):
@@ -368,6 +380,28 @@ class HooksJsonInterpreter(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("no Python 3 found", r.stderr)
 
+
+@unittest.skipUnless(NODE, "needs node")
+class HookLauncherRealPython(HookFixture):
+    """run_hook.js with this machine's real Python, on every OS (Windows included)."""
+
+    def run_launcher(self, path_dirs, env_extra=None):
+        env = self.hook_env(env_extra)
+        env["PATH"] = os.pathsep.join(path_dirs)
+        return subprocess.run([NODE] + hook_launcher()[1:], input=json.dumps(self.event()), env=env,
+                              capture_output=True, text=True, timeout=60)
+
+    def test_event_reaches_the_hook(self):
+        r = self.run_launcher([os.path.dirname(sys.executable)],
+                              {"SESSION_RECEIPT_AUTO": "1", "SESSION_RECEIPT_FOREGROUND": "1"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.calls_made()[0]["argv"][:3], ["session", "--id", SID])
+
+    def test_no_python_says_so(self):
+        r = self.run_launcher([tempfile.mkdtemp()])
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no Python 3 found", r.stderr)
+        self.assertEqual(self.calls_made(), [])
 
 if os.name == "nt":
     import ctypes
