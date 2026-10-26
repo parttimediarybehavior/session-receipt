@@ -88,3 +88,79 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDefaultTz(unittest.TestCase):
+    """The --tz default; files are passed in so the real /etc is never read."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp(dir=_tmp)
+        self.none = os.path.join(self.d, "missing")
+
+    def tz(self, environ=None, timezone_file=None, localtime=None):
+        from session_receipt.cli import default_tz
+        return default_tz(environ or {}, timezone_file or self.none, localtime or self.none)
+
+    def link(self, target):
+        path = os.path.join(self.d, "localtime")
+        try:
+            os.symlink(target, path)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlinks here")
+        return path
+
+    def test_nothing_set_is_utc(self):
+        self.assertEqual(self.tz(), "UTC")
+
+    def test_session_receipt_tz_wins_over_tz_and_etc_timezone(self):  # no symlink: runs on Windows
+        f = os.path.join(self.d, "timezone")
+        with open(f, "w") as fh:
+            fh.write("Europe/Berlin\n")
+        self.assertEqual(self.tz({"SESSION_RECEIPT_TZ": "Asia/Tokyo", "TZ": "Europe/Paris"}, timezone_file=f),
+                         "Asia/Tokyo")
+        self.assertEqual(self.tz({"SESSION_RECEIPT_TZ": "", "TZ": "Europe/Paris"}, timezone_file=f),
+                         "Europe/Paris")  # empty counts as unset
+
+    def test_variables_win_over_localtime(self):
+        link = self.link("/usr/share/zoneinfo/America/Chicago")
+        self.assertEqual(self.tz({"SESSION_RECEIPT_TZ": "Asia/Tokyo"}, localtime=link), "Asia/Tokyo")
+        self.assertEqual(self.tz({"TZ": "Europe/Paris"}, localtime=link), "Europe/Paris")
+
+    def test_tz_then_etc_timezone(self):
+        f = os.path.join(self.d, "timezone")
+        with open(f, "w") as fh:
+            fh.write("Europe/Berlin\n")
+        self.assertEqual(self.tz({"TZ": "Europe/Paris"}, timezone_file=f), "Europe/Paris")
+        self.assertEqual(self.tz(timezone_file=f), "Europe/Berlin")
+
+    def test_localtime_symlink(self):
+        for target, want in (("/usr/share/zoneinfo/America/Chicago", "America/Chicago"),     # Fedora, Arch
+                             ("/var/db/timezone/zoneinfo/Europe/London", "Europe/London"),   # macOS
+                             ("../usr/share/zoneinfo/posix/Asia/Kolkata", "Asia/Kolkata")):
+            with self.subTest(target=target):
+                self.assertEqual(self.tz(localtime=self.link(target)), want)
+                os.remove(os.path.join(self.d, "localtime"))
+
+    def test_unusable_localtime_is_utc(self):
+        for target in ("/usr/share/zoneinfo/Not/AZone", "/usr/share/zoneinfo/", "/etc/some-copy"):
+            with self.subTest(target=target):
+                self.assertEqual(self.tz(localtime=self.link(target)), "UTC")
+                os.remove(os.path.join(self.d, "localtime"))
+
+    def test_copied_localtime_is_utc(self):  # a plain file, not a symlink
+        f = os.path.join(self.d, "plain")
+        open(f, "w").close()
+        self.assertEqual(self.tz(localtime=f), "UTC")
+
+    def test_unknown_zone_names_its_source(self):
+        from unittest import mock
+        from session_receipt.cli import _tz, ReceiptError
+        with mock.patch.dict(os.environ, {"SESSION_RECEIPT_TZ": "Central Standard Time"}):
+            with self.assertRaises(ReceiptError) as e:
+                _tz("Central Standard Time")
+        self.assertIn("'Central Standard Time' (from SESSION_RECEIPT_TZ)", str(e.exception))
+        self.assertIn("use an IANA name such as America/Chicago", str(e.exception))
+        with mock.patch.dict(os.environ, {"SESSION_RECEIPT_TZ": "", "TZ": ""}):
+            with self.assertRaises(ReceiptError) as e:
+                _tz("Not/AZone")  # from --tz: no source named
+        self.assertNotIn("(from", str(e.exception))

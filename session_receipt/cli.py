@@ -16,14 +16,30 @@ class NotFound(ReceiptError):
     pass
 
 
-def default_tz():
-    tz = os.environ.get("TZ")
+def default_tz(environ=os.environ, timezone_file="/etc/timezone", localtime="/etc/localtime"):
+    """--tz default: SESSION_RECEIPT_TZ, TZ, /etc/timezone (Debian, Ubuntu), the zone named by the
+    /etc/localtime symlink (macOS, Fedora, Arch), else UTC. Windows has none of the files, so set
+    SESSION_RECEIPT_TZ there; TZ is read by other Windows programs in a different format."""
+    tz = environ.get("SESSION_RECEIPT_TZ") or environ.get("TZ")
     if not tz:
         try:
-            with open("/etc/timezone") as f:
+            with open(timezone_file) as f:
                 tz = f.read().strip()
         except OSError:
             tz = None
+    if not tz:
+        try:
+            _, sep, name = os.readlink(localtime).rpartition("zoneinfo/")
+        except (OSError, ValueError):
+            sep = name = ""
+        for prefix in ("posix/", "right/"):
+            name = name[len(prefix):] if name.startswith(prefix) else name
+        try:
+            if sep and name:
+                ZoneInfo(name)
+                tz = name
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            pass
     return tz or "UTC"
 
 
@@ -72,8 +88,11 @@ def _tz(name):
     try:
         ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError, KeyError):
-        hint = "; on Windows, install tzdata (pip install tzdata)" if os.name == "nt" else ""
-        raise ReceiptError("unknown timezone %r%s" % (name, hint))
+        src = next((v for v in ("SESSION_RECEIPT_TZ", "TZ") if os.environ.get(v) == name), None)
+        hint = " (from %s)" % src if src else ""
+        if os.name == "nt" and importlib.util.find_spec("tzdata") is None:
+            hint += "; install tzdata (pip install tzdata)"
+        raise ReceiptError("unknown timezone %r%s; use an IANA name such as America/Chicago" % (name, hint))
     return name
 
 

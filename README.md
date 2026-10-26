@@ -44,7 +44,8 @@ npm ci --prefix vendor
 ```
 
 - Running without installing (`py -m session_receipt`) needs `py -m pip install tzdata` first.
-- Pass `--tz`: there is no `/etc/timezone`, so the default is `UTC` unless `TZ` is set.
+- Set `SESSION_RECEIPT_TZ` once, or pass `--tz`. Windows has no `/etc/timezone`, so otherwise the
+  default is `UTC`. [Report on real usage](#report-on-real-usage) shows the PowerShell command.
 - ccusage runs as the native `ccusage.exe` that npm installed under `vendor/node_modules/@ccusage/`.
   npm picks the build for your Node.js (`process.arch`), which on Windows on Arm can differ from
   your Python. If Python reports ARM64, the ARM64 build is used, or else the x64 build (Windows 11
@@ -109,6 +110,12 @@ Options: `--source claude|codex|both`, `--format html,svg,json`, `--out DIR` (de
 `--env`, `--private`, `--now ISO`, `--claude-dir` (a dir containing `projects/`),
 `--codex-home`. `--latest` means the most recent last activity within today and yesterday
 (or `--since/--until`). A missing session exits non-zero with a message.
+
+`--tz` defaults to `$SESSION_RECEIPT_TZ`, then `$TZ`, then the system zone (`/etc/timezone`, or
+the zone `/etc/localtime` links to, as on macOS and Fedora), else `UTC`. Automatic receipts
+(the hook, below) use the same default. Windows has neither file, so set `SESSION_RECEIPT_TZ`
+there (`[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_TZ", "America/Chicago", "User")`)
+rather than `TZ`, which other Windows programs read in a different format.
 
 ## Offline
 
