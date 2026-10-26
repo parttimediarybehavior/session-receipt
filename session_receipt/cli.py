@@ -88,7 +88,11 @@ def _tz(name):
     try:
         ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError, KeyError):
-        raise ReceiptError("unknown timezone %r" % name)
+        src = next((v for v in ("SESSION_RECEIPT_TZ", "TZ") if os.environ.get(v) == name), None)
+        hint = " (from %s)" % src if src else ""
+        if os.name == "nt" and importlib.util.find_spec("tzdata") is None:
+            hint += "; install tzdata (pip install tzdata)"
+        raise ReceiptError("unknown timezone %r%s; use an IANA name such as America/Chicago" % (name, hint))
     return name
 
 
