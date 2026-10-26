@@ -1,6 +1,6 @@
 {
   "name": "session-receipt",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Pins the ccusage version Session Receipt runs. Claude Code installs it with the plugin; elsewhere run `npm ci`.",
   "license": "MIT",

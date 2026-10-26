@@ -2,35 +2,71 @@
 
 Plugin users get an update only when the version changes. See [Releasing](README.md#releasing).
 
+## 1.0.1 (2026-10-26)
+
+### Plugin updates
+
+- The plugin now has a version, in `.claude-plugin/plugin.json`. Claude Code installs an update
+  only when that version changes, not with every commit to `main` (#10).
+- `package.json`, `package-lock.json`, `pyproject.toml` and the Python package say the same
+  version. A test fails if any of them differ (#10).
+- The README has a "Releasing" section: every pull request that should reach users bumps the
+  version, adds a changelog entry, and gets a `v<x.y.z>` tag after merging (#10).
+
+### Listing
+
+- The plugin has an icon: a real receipt rendered from the synthetic demo (#10).
+- `plugin.json` names the demo page as the plugin's homepage (#10).
+
 ## 1.0.0 (2026-10-26)
 
-The first versioned release.
+The first release. Session Receipt turns your Claude Code usage logs into a receipt. The receipt shows recorded tokens, a cost at API list prices, and where each number came from. Codex support is experimental. The tool makes no model calls, and receipts make no network calls.
 
-### What it does
+### Receipts
 
-- Makes session and daily receipts for Claude Code from your local logs. A receipt shows the
-  tokens recorded per model, an API list-price equivalent cost, and where the numbers came from.
-  Codex receipts are experimental.
-- Runs as plain local code. It makes no model calls, and a receipt makes no network calls.
-- Writes HTML, SVG and JSON. Receipts leave out paths, usernames and raw session IDs unless you
-  pass `--private`.
+- Make a receipt for one session or one day, as HTML, SVG and JSON.
+- See tokens per model: input, output, cache writes and cache reads.
+- See the cost at API list prices. This is not what a subscription plan charges.
+- If a model has no known price, the receipt leaves it out of the total and marks the total as partial.
+- If a total is not known, the receipt says so instead of showing zero.
+- Each receipt names its sources: the ccusage version, the price list date and check status, and the time zone.
+- Optional environmental scenarios, clearly marked as illustrations, not measurements.
+- `demo` builds example receipts from synthetic logs, so you can try the tool with no real usage.
 
-### New in this release
+### Install and setup
 
-- Installs as a Claude Code plugin from this repository, or with one line, with no `pip install`
-  (#7).
-- `session-receipt doctor` checks Python, the time zone database and ccusage, and prints the fix
-  for each problem (#7).
-- Supports Windows, including the optional SessionEnd hook (#3).
-- `--tz` defaults to `SESSION_RECEIPT_TZ`, then `TZ`, then the system time zone (#6).
-- `update-prices` builds the new price files in a staging folder first, and puts the old ones
-  back if a step fails (#4).
-- A Claude receipt with no priced model shows an unknown total, not $0. Codex receipts check
-  ccusage's token counts against the logs' own records (#5).
-- The plugin has a version, an icon and a homepage (#10).
+- Install as a Claude Code plugin with one command, or clone the repository and run `npm ci`. You do not need `pip install`.
+- The plugin installs a pinned copy of ccusage 20.0.38.
+- `/session-receipt:receipt` makes a receipt from inside Claude Code.
+- Optional: a SessionEnd hook writes a receipt automatically when a session ends.
+- `session-receipt doctor` checks Python, the time zone database and ccusage, and prints the exact fix for each problem.
 
-### Tested on
+### Windows
 
-- Linux x64 and Windows x64. On Windows, a real install from the marketplace, the
-  `/session-receipt:receipt` skill and the SessionEnd hook all worked.
-- Not tested yet: macOS, and `/session-receipt:receipt today` on Windows.
+- Runs on Windows with the native ccusage build and the `tzdata` package.
+- The hook runs through `node` with no shell, so it works under PowerShell.
+- The hook falls back from `python3` to `python` to `py -3`.
+- The hook accepts input that starts with a byte-order mark.
+- `doctor` prints commands that work in PowerShell.
+- The skill gives PowerShell forms of its commands and pre-approves them.
+
+### Time zones
+
+- The default time zone comes from `SESSION_RECEIPT_TZ`, then `TZ`, then the system setting, then UTC.
+- An unknown time zone gives an error that names where the bad value came from.
+
+### Prices
+
+- Prices come from a dated snapshot that the tool checks against a published price list.
+- `update-prices` refreshes the snapshot only when you run it. It checks all the new price files before replacing any, and it rolls back if it is interrupted.
+
+### Codex (experimental)
+
+- Matches a session ID to its log on any operating system.
+- Checks token counts and reports every kind of gap without crashing.
+- Describes subagent usage accurately.
+
+### Tests and CI
+
+- Tests run on Ubuntu and Windows in CI.
+- The test suite no longer leaves files open.
