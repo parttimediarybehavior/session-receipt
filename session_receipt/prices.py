@@ -110,13 +110,11 @@ def _write_json(path, obj):
 FILES = ("openrouter-snapshot.json", "reference.json", "ccusage-overrides.json")  # publish order
 
 
-class _NotRestored(ad.ReceiptError):
-    """A publish failed and so did putting an old file back; the staging dir holds the old files."""
-
-
 def _publish(stage, pricing_dir):
-    """Replace each active file with its staged copy. On any failure, put back the ones already
-    replaced from copies in stage/previous (or remove them if they are new) and raise."""
+    """Replace each active file with its staged copy, then remove `stage`. On any failure, put
+    back every file a replace was attempted on, from copies in stage/previous (or remove it if it
+    is new), and raise. `stage` is removed only after a success or a complete rollback; otherwise
+    it stays, because stage/previous may hold the only copies of the previous files."""
     prev = os.path.join(stage, "previous")
     os.makedirs(prev)
     existed = set()
@@ -125,33 +123,42 @@ def _publish(stage, pricing_dir):
             try:
                 shutil.copyfile(os.path.join(pricing_dir, n), os.path.join(prev, n))
             except OSError as e:
+                shutil.rmtree(stage, ignore_errors=True)
                 raise ad.ReceiptError("could not copy %s before replacing it (%s); nothing changed" % (n, e))
             existed.add(n)
-    done = []
+    attempted = []
     try:
         for n in FILES:
+            attempted.append(n)  # before the replace: an interrupt can land right after it
             os.replace(os.path.join(stage, n), os.path.join(pricing_dir, n))
-            done.append(n)
     except BaseException as e:  # incl. Ctrl-C: never leave a partial set if it can be undone
+        # An OSError from os.replace means that file was not replaced; after an interrupt it may
+        # have been. Restoring a file that was not replaced just rewrites its old bytes.
+        replaced = attempted[:-1] if isinstance(e, OSError) else attempted
         failed = []
-        for n in reversed(done):
+        for n in reversed(replaced):
             try:
                 if n in existed:
                     os.replace(os.path.join(prev, n), os.path.join(pricing_dir, n))
                 else:
-                    os.remove(os.path.join(pricing_dir, n))
-            except OSError:
+                    try:
+                        os.remove(os.path.join(pricing_dir, n))
+                    except FileNotFoundError:
+                        pass
+            except BaseException:  # incl. a second Ctrl-C; keep going and report it
                 failed.append(n)
         if failed:
-            raise _NotRestored(
-                "could not replace %s (%s), and could not restore %s; the pricing files are now "
-                "a mix of old and new. The previous copies are in %s: copy them back into %s "
-                "before making receipts." % (FILES[len(done)], e, ", ".join(sorted(failed)), prev,
+            raise ad.ReceiptError(
+                "could not replace %s (%s), and could not restore %s; the pricing files may now "
+                "be a mix of old and new. The previous copies are in %s: copy them back into %s "
+                "before making receipts." % (attempted[-1], e, ", ".join(sorted(failed)), prev,
                                              pricing_dir))
+        shutil.rmtree(stage, ignore_errors=True)
         if isinstance(e, OSError):
             raise ad.ReceiptError("could not replace %s (%s); previous pricing files restored, "
-                                  "nothing changed" % (FILES[len(done)], e))
+                                  "nothing changed" % (attempted[-1], e))
         raise
+    shutil.rmtree(stage, ignore_errors=True)
 
 
 def _stage(stage, reference, snapshot):
@@ -192,16 +199,17 @@ def update(raw, fetched_at=None, pricing_dir=PRICING_DIR, log=print):
     if not reference["models"]:
         raise ad.ReceiptError("no Claude prices found in the OpenRouter response; nothing written")
     # Stage next to the active files (same filesystem, so os.replace does not copy).
-    stage = tempfile.mkdtemp(prefix=".update-", dir=pricing_dir)
+    try:
+        stage = tempfile.mkdtemp(prefix=".update-", dir=pricing_dir)
+    except OSError as e:
+        raise ad.ReceiptError("could not create a staging directory in %s (%s); nothing written"
+                              % (pricing_dir, e))
     try:
         overrides, notes = _stage(stage, reference, snapshot)
-        _publish(stage, pricing_dir)
-    except _NotRestored:
-        raise  # keep the staging dir: it holds the only copies of the previous files
     except BaseException:
-        shutil.rmtree(stage, ignore_errors=True)
+        shutil.rmtree(stage, ignore_errors=True)  # nothing active was touched yet
         raise
-    shutil.rmtree(stage, ignore_errors=True)
+    _publish(stage, pricing_dir)  # removes the stage itself, unless it holds the only old copies
     log("prices as of %s from %s: %d Claude models, %d override(s)"
         % (reference["as_of"], URL, len(reference["models"]), len(overrides)))
     for n in notes:

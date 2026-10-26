@@ -84,10 +84,13 @@ a spot check against Anthropic's pricing page that day agreed. The tool never wr
 read back. A download or parse error, a missing or failing ccusage, or any probe error stops
 there, and the active files stay byte-identical. Only then are the files swapped in, one
 `os.replace` per file. Each file is replaced whole, so a reader never sees a half-written file,
-but the three are not replaced together. If one replace fails, the files already replaced are
-put back from copies taken just before, and the command reports that nothing changed. If
-putting one back also fails, the error names the staging directory, which keeps the previous
-files in `previous/`, and you copy them back yourself. What this does not cover:
+but the three are not replaced together. If one replace fails or is interrupted with Ctrl-C,
+every file it reached is put back from copies taken just before, and the command reports that
+nothing changed. If putting one back also fails or is interrupted, the error names the staging
+directory, which keeps the previous files in `previous/`, and you copy them back yourself. The
+staging directory is deleted only after a success or a complete rollback, so one left behind
+after an interrupt may hold the only old copies; delete it once the active files are right.
+What this does not cover:
 
 - A process that is killed, or a machine that loses power, during the swap leaves a mix of old
   and new files. The swap takes milliseconds. Re-run `update-prices` to finish it, or copy back
@@ -96,8 +99,8 @@ files in `previous/`, and you copy them back yourself. What this does not cover:
   then shows a mismatch, and its provenance records the reference date and the overrides hash
   it actually used.
 - Two `update-prices` runs at the same time are not locked against each other.
-- On Windows, a file another program has open can refuse the replace. That is the
-  "restored, nothing changed" case above; close it and retry. The Windows behaviour of this
+- On Windows, a file another program has open can refuse the replace. That normally ends in
+  the "restored, nothing changed" case above; close it and retry. The Windows behaviour of this
   path is reasoned from how `os.replace` works there, not tested on Windows.
 
 ## How to read the receipt

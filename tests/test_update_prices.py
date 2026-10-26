@@ -8,6 +8,10 @@ from session_receipt import ccusage_adapter as ad, prices, pricecheck
 FILES = ("openrouter-snapshot.json", "reference.json", "ccusage-overrides.json")
 
 
+class Interrupt(BaseException):
+    """Stands in for KeyboardInterrupt, which would also stop the test runner."""
+
+
 def openrouter(sonnet_read="0.0000001", haiku_prompt="0.0000001"):
     def m(i, prompt, comp, read, w5, w1h, tiers=None):
         p = {"prompt": prompt, "completion": comp, "input_cache_read": read,
@@ -130,18 +134,27 @@ class TestUpdateFailureKeepsOldFiles(unittest.TestCase):
             self.update(json.dumps({"data": [{"id": "openai/gpt-5.5", "pricing": {}}]}).encode())
         self.assert_unchanged()
 
-    def replace_failing_at(self, name, also_fail=()):
-        """os.replace that raises when publishing `name`, and on any rollback onto `also_fail`."""
-        real, published = os.replace, []
+    def patched_replace(self, publish=(), restore=(), after=()):
+        """os.replace into the pricing dir that raises publish[name] instead of publishing a file,
+        restore[name] instead of putting its old copy back, or after[name] once it is published."""
+        real, publish, restore, after = os.replace, dict(publish), dict(restore), dict(after)
 
         def fake(src, dst):
+            if os.path.dirname(os.path.abspath(dst)) != os.path.abspath(self.dir):
+                return real(src, dst)  # staging writes
             base = os.path.basename(dst)
-            if os.path.dirname(os.path.abspath(dst)) == os.path.abspath(self.dir):
-                if base == name and base not in published or base in also_fail and base in published:
-                    raise OSError("simulated failure replacing " + base)
-                published.append(base)
-            return real(src, dst)
+            restoring = os.path.basename(os.path.dirname(src)) == "previous"
+            plan = restore if restoring else publish
+            if base in plan:
+                raise plan.pop(base)
+            real(src, dst)
+            if not restoring and base in after:
+                raise after.pop(base)
         return mock.patch.object(prices.os, "replace", side_effect=fake)
+
+    def replace_failing_at(self, name, also_fail=()):
+        return self.patched_replace(publish={name: OSError("simulated failure replacing " + name)},
+                                    restore={n: OSError("simulated failure restoring " + n) for n in also_fail})
 
     def test_publish_failure_rolls_back_files_already_replaced(self):
         for name in FILES[1:]:  # at least one file is already replaced when this one fails
@@ -151,12 +164,48 @@ class TestUpdateFailureKeepsOldFiles(unittest.TestCase):
                         self.update()
                 self.assert_unchanged()
 
+    def test_locked_file_is_not_restored_onto(self):
+        # Windows-like: a file another program holds open refuses both the replace and any restore.
+        name = "ccusage-overrides.json"
+        with self.replace_failing_at(name, also_fail=(name,)):
+            with self.assertRaisesRegex(ad.ReceiptError, "previous pricing files restored"):
+                self.update()
+        self.assert_unchanged()
+
     def test_publish_failure_on_first_use_removes_new_files(self):
         self.dir = tempfile.mkdtemp(dir=_tmp)
         with self.replace_failing_at("ccusage-overrides.json"):
             with self.assertRaises(ad.ReceiptError):
                 self.update()
         self.assertEqual(os.listdir(self.dir), [])
+
+    def test_interrupt_right_after_a_replace_rolls_it_back(self):
+        # Ctrl-C lands after os.replace has swapped reference.json in, before anything recorded it.
+        with self.patched_replace(after={"reference.json": Interrupt()}):
+            with self.assertRaises(Interrupt):
+                self.update()
+        self.assert_unchanged()
+
+    def test_interrupt_during_rollback_keeps_the_previous_files(self):
+        # Publishing overrides fails, then a second Ctrl-C hits while reference.json is put back.
+        with self.patched_replace(publish={"ccusage-overrides.json": OSError("simulated")},
+                                  restore={"reference.json": Interrupt()}):
+            with self.assertRaisesRegex(ad.ReceiptError, "could not restore reference.json") as e:
+                self.update()
+        kept = [n for n in os.listdir(self.dir) if n not in FILES]
+        self.assertEqual(len(kept), 1)
+        self.assertIn(kept[0], str(e.exception))
+        with open(os.path.join(self.dir, kept[0], "previous", "reference.json"), "rb") as f:
+            self.assertEqual(f.read(), self.before["reference.json"])
+        now = self.snapshot_files()
+        self.assertNotEqual(now["reference.json"], self.before["reference.json"])  # the reported mix
+        self.assertEqual(now["openrouter-snapshot.json"], self.before["openrouter-snapshot.json"])
+
+    def test_unwritable_pricing_dir(self):
+        with mock.patch.object(prices.tempfile, "mkdtemp", side_effect=PermissionError("read-only")):
+            with self.assertRaisesRegex(ad.ReceiptError, "nothing written"):
+                self.update()
+        self.assert_unchanged()
 
     def test_backup_failure_changes_nothing(self):
         with mock.patch.object(prices.shutil, "copyfile", side_effect=OSError("disk full")):
