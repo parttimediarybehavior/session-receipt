@@ -118,13 +118,20 @@ always escaped before they reach HTML or SVG.
   Codex prices are not checked against the snapshot yet, so they read "unverified". A model
   ccusage cannot price reads "unknown" and the subtotal is partial (or unknown if no model in
   it is priced). Allocating cost across models is never guessed.
-- Codex count check: ccusage 20.0.38 can drop a spawned subagent thread's usage (seen: a
-  one-response subagent whose `token_count` event is written twice). Newer Codex rollouts record
-  every response in a `token_usage_record` line, so Codex receipts add those up (token numbers
-  and timestamps only) and compare. When ccusage counted less, the receipt says
-  "undercount: the Codex logs record N tokens that ccusage did not count"; the counts and cost stay
-  ccusage's. JSON carries `count_check` (`ok`, `undercount`, or `not_checked` for older rollouts
-  without those lines). This is the one place the tool reads a raw log itself.
+- Codex count check: ccusage 20.0.38 to 20.0.44 can drop a spawned subagent thread's usage
+  ([ccusage#1970](https://github.com/ccusage/ccusage/issues/1970): a one-response subagent whose
+  `token_count` event is written twice). Newer Codex rollouts record every response in a
+  `token_usage_record` line, so Codex receipts add those up (token numbers and timestamps only)
+  and compare. The counts and cost stay ccusage's. JSON carries `count_check` with a `status`:
+  - `undercount`: the logs record tokens ccusage did not count. The receipt says so, and
+    `totals.partial` is true because the counts and cost are a lower bound. If ccusage counted
+    nothing for a day, the daily receipt still gets a Codex block showing 0 and the gap.
+  - `mismatch`: ccusage counted more than the records show, so the extra could not be checked.
+  - `incomplete`: some records near that day or session could not be read or dated. A bad
+    record is skipped and counted; it never stops the receipt.
+  - `ok`: they agree. `not_checked`: older rollouts with no such records.
+
+  This is the one place the tool reads a raw log itself.
 - Ambiguous records are counted as ccusage counts them, not reinterpreted:
   - A **model fallback** record (top-level model is the fallback, `iterations` show a failed
     first attempt on another model) is booked to the fallback model, including the cache writes

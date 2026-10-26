@@ -178,6 +178,13 @@ def _block(c, r, private, show_env, notes):
             c.wrapped("undercount: the Codex logs record %s tokens that ccusage did not count (a ccusage "
                       "gap seen with some subagent threads). The counts and cost on this receipt exclude them."
                       % fmt_int(cc["missing_tokens"]), 96, size=10, weight="bold")
+        elif cc.get("status") == "mismatch":
+            c.wrapped("count check: ccusage counted %s more tokens than the Codex logs' per-response records "
+                      "show, so those could not be checked." % fmt_int(cc.get("extra_tokens", 0)),
+                      96, size=10, fill="#444")
+        elif cc.get("status") == "incomplete":
+            c.wrapped("count check incomplete: %s Codex log record(s) could not be read or dated."
+                      % fmt_int(cc.get("skipped_records", 0)), 96, size=10, fill="#444")
     c.line("Counts are tokens as recorded in local logs, per provider; not comparable across providers.",
            10, fill="#444")
     c.y += 8

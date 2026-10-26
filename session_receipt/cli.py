@@ -125,7 +125,14 @@ def select_sessions(args, now):
         found += hits
     if not found:
         if args.id:
-            raise NotFound("session %r not found in source(s): %s" % (args.id, ", ".join(_sources(args))))
+            extra = ""
+            if "codex" in _sources(args):
+                n = codex_check.uncounted_session(args.id, args.codex_home)
+                if n:
+                    extra = ("; the Codex logs record %s tokens for it, which ccusage did not count "
+                             "(see ccusage/ccusage#1970); a daily receipt for that day shows the gap"
+                             % "{:,}".format(n))
+            raise NotFound("session %r not found in source(s): %s%s" % (args.id, ", ".join(_sources(args)), extra))
         raise NotFound("no sessions found for %s to %s (source(s): %s). Pass --since/--until or "
                        "--claude-dir/--codex-home." % (since, until, ", ".join(_sources(args))))
     return found
@@ -133,7 +140,7 @@ def select_sessions(args, now):
 
 def select_daily(args):
     tz = _tz(args.tz)
-    found, uncounted = [], 0
+    found = []
     for src in _sources(args):
         if src == "claude":
             days = ad.fetch_claude_daily(tz, args.date, args.date, claude_dir=args.claude_dir)
@@ -141,21 +148,18 @@ def select_daily(args):
             days = ad.fetch_codex_daily(tz, args.date, args.date, codex_home=args.codex_home)
         hits = [d for d in days if d.window_start == args.date]
         if src == "codex":
-            if hits:
-                day_sessions = ad.fetch_codex_sessions(tz, args.date, args.date, codex_home=args.codex_home)
-                codex_check.check_daily(hits[0], day_sessions, args.codex_home)
-            else:
-                uncounted = sum(codex_check.day_log(args.date, tz, args.codex_home).values())
-                if uncounted and found:
-                    print("warning: ccusage counted no Codex usage for %s, but the Codex logs record %s "
-                          "tokens that day; this receipt has no Codex block." % (args.date, "{:,}".format(uncounted)),
-                          file=sys.stderr)
+            day_sessions = ad.fetch_codex_sessions(tz, args.date, args.date, codex_home=args.codex_home)
+            if not hits and codex_check.day_log(args.date, tz, args.codex_home)[0]:
+                # ccusage counted nothing, but the logs record usage: say so on the receipt itself
+                empty = ad.Receipt(kind="daily", source="codex", label="one day, %s, %s" % (args.date, tz),
+                                   tz=tz, window_start=args.date, window_end=args.date)
+                hits = [ad._finish_codex(empty, [], None, ad.tool_version(), ad.provenance())]
+            for d in hits:
+                codex_check.check_daily(d, day_sessions, args.codex_home)
         found += hits
     if not found:
-        extra = ("; the Codex logs do record %s tokens that day, which ccusage did not count"
-                 % "{:,}".format(uncounted)) if uncounted else ""
-        raise NotFound("no usage recorded for %s (%s) in source(s): %s%s"
-                       % (args.date, tz, ", ".join(_sources(args)), extra))
+        raise NotFound("no usage recorded for %s (%s) in source(s): %s"
+                       % (args.date, tz, ", ".join(_sources(args))))
     return found
 
 

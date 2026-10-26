@@ -114,15 +114,37 @@ class F2CodexCountCheck(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         rec = j["receipts"][0]
         self.assertEqual(rec["totals"]["total_tokens"], 1010)      # what ccusage counted
-        self.assertEqual(rec["count_check"], {"status": "undercount", "log_tokens": 16110, "missing_tokens": 15100})
+        self.assertEqual(rec["count_check"], {"status": "undercount", "log_tokens": 16110, "missing_tokens": 15100,
+                                              "extra_tokens": 0, "skipped_records": 0})
+        self.assertTrue(rec["totals"]["partial"])                   # the counts are a lower bound
         self.assertIn("undercount: the Codex logs record 15,100 tokens that ccusage did not count", visible)
 
-    def test_only_usage_of_the_day_dropped_says_so(self):
+    def test_only_usage_of_the_day_dropped_still_gets_a_receipt(self):
         home = tempfile.mkdtemp()
         rollout(home, CHILD, PARENT, [usage(15000, 12000, 100)], token_count_repeats=2)
-        r, j, _, _ = run("daily", "--date", "2026-01-05", "--source", "codex", "--codex-home", home)
+        r, j, visible, _ = run("daily", "--date", "2026-01-05", "--source", "codex", "--codex-home", home)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rec = j["receipts"][0]
+        self.assertEqual((rec["source"], rec["totals"]["total_tokens"], rec["totals"]["cost_usd"]), ("codex", 0, None))
+        self.assertEqual(rec["count_check"]["missing_tokens"], 15100)
+        self.assertIn("undercount: the Codex logs record 15,100 tokens", visible)
+
+    def test_dropped_codex_day_shows_on_a_both_sources_receipt(self):
+        home, claude = tempfile.mkdtemp(), tempfile.mkdtemp()
+        rollout(home, CHILD, PARENT, [usage(15000, 12000, 100)], token_count_repeats=2)
+        claude_unpriced(claude)
+        r, j, visible, _ = run("daily", "--date", "2026-01-05", "--source", "both",
+                               "--codex-home", home, "--claude-dir", claude)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual([x["source"] for x in j["receipts"]], ["claude", "codex"])
+        self.assertEqual(j["receipts"][1]["count_check"]["status"], "undercount")
+
+    def test_session_id_of_a_dropped_rollout_explains(self):
+        home = tempfile.mkdtemp()
+        sid = rollout(home, CHILD, PARENT, [usage(15000, 12000, 100)], token_count_repeats=2)
+        r, _, _, _ = run("session", "--source", "codex", "--id", sid, "--codex-home", home)
         self.assertEqual(r.returncode, 2)
-        self.assertIn("15,100 tokens", r.stderr)
+        self.assertIn("record 15,100 tokens for it, which ccusage did not count", r.stderr)
 
     def test_partial_drop_in_a_session_receipt(self):
         home = tempfile.mkdtemp()
@@ -140,8 +162,51 @@ class F2CodexCountCheck(unittest.TestCase):
         sid = rollout(home, PARENT, None, [usage(1000, 400, 10), usage(2000, 1500, 20)])
         r, j, visible, _ = run("session", "--source", "codex", "--id", sid, "--codex-home", home)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(j["receipts"][0]["count_check"], {"status": "ok", "log_tokens": 3030, "missing_tokens": 0})
+        self.assertEqual(j["receipts"][0]["count_check"], {"status": "ok", "log_tokens": 3030, "missing_tokens": 0,
+                                                           "extra_tokens": 0, "skipped_records": 0})
         self.assertNotIn("undercount", visible)
+        self.assertNotIn("count check", visible)
+
+    def test_malformed_records_never_crash(self):
+        home = tempfile.mkdtemp()
+        sid = rollout(home, PARENT, None, [usage(1000, 0, 10)])
+        path = os.path.join(home, "sessions", sid + ".jsonl")
+        bad = ['["token_usage_record"]',
+               '{"type":"token_usage_record","timestamp":"2026-01-05T15:00:09Z","payload":{"usage":{"input_tokens":1e999,"output_tokens":1}}}',
+               '{"type":"token_usage_record","timestamp":"2026-01-05T15:00:09Z","payload":{"response_id":{},"usage":{"input_tokens":1,"output_tokens":1}}}',
+               '{"type":"token_usage_record","timestamp":"2026-01-05T15:00:09Z","payload":{"usage":{"input_tokens":-5,"output_tokens":1}}}',
+               '{"type":"token_usage_record","timestamp":"2026-01-05T15:00:09Z","payload":{"usage":{"input_tokens":"1_000","output_tokens":true}}}',
+               '{"type":"token_usage_record" not json']
+        with open(path, "a") as f:
+            f.write("\n".join(bad) + "\n")
+        for args in (["session", "--id", sid], ["daily", "--date", "2026-01-05"]):
+            r, j, visible, _ = run(*args, "--source", "codex", "--codex-home", home)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            cc = j["receipts"][0]["count_check"]
+            # 5 bad records; the bare JSON list is not a record at all, so it is ignored, not counted
+            self.assertEqual((cc["status"], cc["log_tokens"], cc["skipped_records"]), ("incomplete", 1010, 5))
+            self.assertIn("count check incomplete: 5 Codex log record(s)", visible)
+
+    def test_ccusage_counting_more_than_the_records_is_a_mismatch(self):
+        home = tempfile.mkdtemp()
+        sid = rollout(home, PARENT, None, [usage(1000, 0, 10), usage(2000, 0, 20)])
+        path = os.path.join(home, "sessions", sid + ".jsonl")
+        with open(path) as f:   # keep the token_count events, drop the second response's record
+            rows = [x for x in f if '"resp_1111_1"' not in x]
+        with open(path, "w") as f:
+            f.writelines(rows)
+        r, j, visible, _ = run("session", "--id", sid, "--source", "codex", "--codex-home", home)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        cc = j["receipts"][0]["count_check"]
+        self.assertEqual((cc["status"], cc["log_tokens"], cc["extra_tokens"]), ("mismatch", 1010, 2020))
+        self.assertIn("ccusage counted 2,020 more tokens", visible)
+
+    def test_timestamps_python_310_cannot_parse(self):
+        from session_receipt.codex_check import parse_time
+        self.assertEqual(parse_time("2026-01-05T15:00:02.1234Z").microsecond, 123400)
+        self.assertEqual(parse_time("2026-01-05T15:00:02.1Z").microsecond, 100000)
+        self.assertIsNone(parse_time("2026-13-45T99:00:00Z"))
+        self.assertIsNone(parse_time(12345))
 
     def test_legacy_rollout_without_records_is_not_checked(self):
         from tests.support import fx
