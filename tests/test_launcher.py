@@ -1,10 +1,17 @@
 """bin/ launchers and `doctor`: run the CLI from a checkout or plugin with no pip install."""
+import io
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from unittest import mock
+from zoneinfo import ZoneInfoNotFoundError
+
+from session_receipt import cli
 
 from tests.support import ROOT, CCUSAGE_PRESENT, _tmp
 
@@ -62,6 +69,39 @@ class Doctor(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertRegex(r.stdout, r"ok +ccusage +ccusage 20\.0\.38")
         self.assertNotIn("MISSING", r.stdout)
+
+
+class MissingTimeZones(unittest.TestCase):
+    WIN = r"C:\Users\Jane Doe\AppData\Local\Programs\Python\Python313\python.exe"
+
+    def test_doctor_reports_it_with_the_fix(self):
+        out = io.StringIO()
+        with mock.patch.object(cli, "ZoneInfo", side_effect=ZoneInfoNotFoundError("none")), \
+                redirect_stdout(out):
+            rc = cli.cmd_doctor(None)
+        self.assertEqual(rc, 1)
+        line = next(l for l in out.getvalue().splitlines() if "time zones" in l)
+        self.assertRegex(line, r"^MISSING +time zones +no IANA time zone database\. ")
+        self.assertTrue(line.endswith(cli.tzdata_install()), line)
+
+    def test_windows_command_is_for_powershell(self):
+        fix = cli.tzdata_install(self.WIN, nt=True, venv=False)
+        self.assertEqual(fix, 'In PowerShell, run: & "%s" -m pip install --user tzdata' % self.WIN)
+
+    def test_windows_path_with_dollar_stays_literal(self):
+        fix = cli.tzdata_install(r"C:\Users\a$b\python.exe", nt=True, venv=False)
+        self.assertIn(r'& "C:\Users\a`$b\python.exe" -m pip', fix)
+
+    def test_unix_command_is_for_sh(self):
+        py = "/home/jane doe/.pyenv/versions/3.12.0/bin/python3"
+        fix = cli.tzdata_install(py, nt=False, venv=False)
+        self.assertEqual(fix, "In a terminal, run: '%s' -m pip install --user tzdata" % py)
+        self.assertNotIn("&", fix)
+        self.assertEqual(shlex.split(fix.split(": ", 1)[1])[0], py)
+
+    def test_venv_drops_user(self):
+        self.assertTrue(cli.tzdata_install("/v/bin/python", nt=False, venv=True)
+                        .endswith("/v/bin/python -m pip install tzdata"))
 
 
 if __name__ == "__main__":

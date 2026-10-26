@@ -85,9 +85,15 @@ them, the optional price-check cache in `~/.cache/session-receipt/` (or
 ### Windows
 
 - Windows has no IANA time zone database, so Python needs the `tzdata` package. `session-receipt
-  doctor` prints the exact command for the Python it uses, for example
-  `"C:\Users\Jane Doe\AppData\Local\Programs\Python\Python313\python.exe" -m pip install --user tzdata`.
-  A development install (`pip install -e .`) adds it for you.
+  doctor` prints the install command for the Python it uses, written for PowerShell. For example:
+
+  ```powershell
+  & "C:\Users\Jane Doe\AppData\Local\Programs\Python\Python313\python.exe" -m pip install --user tzdata
+  ```
+
+  The `&` lets PowerShell run a quoted path. In Command Prompt, leave out the `& `. A development
+  install (`pip install -e .`) adds `tzdata` for you. On macOS and Linux the system usually has the
+  database already; if not, doctor prints the same command for your shell, without the `&`.
 - Pass `--tz`: there is no `/etc/timezone`, so the default is `UTC` unless `TZ` is set.
 - ccusage runs as the native `ccusage.exe` that npm installed under `node_modules/@ccusage/`.
   npm picks the build for your Node.js (`process.arch`), which on Windows on Arm can differ from

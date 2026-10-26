@@ -3,6 +3,7 @@ import argparse
 import importlib.util
 import os
 import platform
+import shlex
 import shutil
 import sys
 import tempfile
@@ -75,7 +76,7 @@ def _tz(name):
     try:
         ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError, KeyError):
-        hint = "; on Windows, install tzdata (pip install tzdata)" if os.name == "nt" else ""
+        hint = "; on Windows, install tzdata (session-receipt doctor prints the command)" if os.name == "nt" else ""
         raise ReceiptError("unknown timezone %r%s" % (name, hint))
     return name
 
@@ -238,6 +239,15 @@ def cmd_pricecheck(args):
     return 1 if bad else 0
 
 
+def tzdata_install(python=sys.executable, nt=os.name == "nt", venv=sys.prefix != sys.base_prefix):
+    """How to install tzdata for this Python. Windows users get the PowerShell form, which needs the
+    & call operator to run a quoted path; elsewhere the line is for sh, bash or zsh."""
+    args = "-m pip install%s tzdata" % ("" if venv else " --user")  # pip refuses --user in a venv
+    if nt:
+        return 'In PowerShell, run: & "%s" %s' % (python.replace("`", "``").replace("$", "`$"), args)
+    return "In a terminal, run: %s %s" % (shlex.quote(python), args)
+
+
 def cmd_doctor(args):
     """Check Python, the time zone database and ccusage. Exit 1 if any is missing."""
     missing = 0
@@ -251,8 +261,7 @@ def cmd_doctor(args):
         line("ok", "time zones", "IANA time zone database found")
     except ZoneInfoNotFoundError:
         missing += 1
-        line("MISSING", "time zones", 'no IANA time zone database. Run: "%s" -m pip install --user tzdata'
-             % sys.executable)
+        line("MISSING", "time zones", "no IANA time zone database. " + tzdata_install())
     try:
         found = "%s (%s)" % (ad.tool_version(), ad.find_binary())
     except (ReceiptError, OSError):
