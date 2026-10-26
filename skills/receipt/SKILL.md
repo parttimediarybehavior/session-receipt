@@ -2,7 +2,7 @@
 name: receipt
 description: Make a Session Receipt (a nutrition-label style usage receipt) for the current Claude Code session or a given day. Use when the user asks "how much did this session use", "show me a receipt", "token/cost receipt", or "what did today cost".
 argument-hint: "[session|today|YYYY-MM-DD] [--env]"
-allowed-tools: Bash(session-receipt:*)
+allowed-tools: Bash(session-receipt:*) PowerShell(session-receipt:*)
 ---
 
 # Session Receipt

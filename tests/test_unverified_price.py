@@ -11,7 +11,8 @@ class TestUnverifiedPrice(unittest.TestCase):
         r = subprocess.run([sys.executable, "-m", "session_receipt", "demo", "--out", out, "--now", "2026-01-06T12:00:00Z"],
                            cwd=ROOT, env=env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
-        svg = open(os.path.join(out, "demo-simple.svg"), encoding="utf-8").read()
+        with open(os.path.join(out, "demo-simple.svg"), encoding="utf-8") as f:
+            svg = f.read()
         visible = " ".join(re.findall(r"<text[^>]*>([^<]*)</text>", svg))
         self.assertIn("unverified: prices for gpt-5 come from ccusage&#x27;s table", visible)
         # Claude models with a reference entry are not labelled unverified
