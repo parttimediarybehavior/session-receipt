@@ -18,7 +18,8 @@ class HookFixture(unittest.TestCase):
         self.calls = os.path.join(self.tmp, "calls.jsonl")
         self.fake = self.write_fake(os.path.join(self.tmp, "fake_cli.py"))
         self.transcript = os.path.join(self.tmp, "t.jsonl")
-        open(self.transcript, "w").write("{}\n")
+        with open(self.transcript, "w") as f:
+            f.write("{}\n")
 
     def write_fake(self, path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -48,7 +49,10 @@ class HookFixture(unittest.TestCase):
         return r, time.monotonic() - t0
 
     def calls_made(self):
-        return [json.loads(l) for l in open(self.calls)] if os.path.exists(self.calls) else []
+        if not os.path.exists(self.calls):
+            return []
+        with open(self.calls) as f:
+            return [json.loads(l) for l in f]
 
     def wait_for_calls(self, timeout=8):
         deadline = time.monotonic() + timeout
@@ -68,7 +72,8 @@ class HookFixture(unittest.TestCase):
         return th
 
     def log(self):
-        return open(os.path.join(self.data, "hook.log")).read()
+        with open(os.path.join(self.data, "hook.log")) as f:
+            return f.read()
 
 
 class HookTest(HookFixture):
@@ -99,7 +104,7 @@ class HookTest(HookFixture):
         self.run_hook({"SESSION_RECEIPT_AUTO": "1", "SESSION_RECEIPT_FOREGROUND": "1"},
                       event={"session_id": "x; rm -rf /", "transcript_path": self.transcript})
         self.assertEqual(self.calls_made(), [])
-        self.assertIn("unexpected session_id", open(os.path.join(self.data, "hook.log")).read())
+        self.assertIn("unexpected session_id", self.log())
 
     def test_malformed_stdin_is_harmless_and_logged(self):
         for bad in ("not json", "[1, 2]"):
@@ -127,7 +132,7 @@ class HookTest(HookFixture):
         os.remove(self.transcript)
         self.run_hook({"SESSION_RECEIPT_AUTO": "1", "SESSION_RECEIPT_FOREGROUND": "1"})
         self.assertEqual(self.calls_made(), [])
-        self.assertIn("transcript missing or still changing", open(os.path.join(self.data, "hook.log")).read())
+        self.assertIn("transcript missing or still changing", self.log())
 
     def test_transcript_still_changing_past_max_wait_writes_no_receipt(self):
         stop_writing = time.monotonic() + 3.0
@@ -141,7 +146,7 @@ class HookTest(HookFixture):
                        "SESSION_RECEIPT_MAX_WAIT_S": "1.5"})
         th.join()
         self.assertEqual(self.calls_made(), [])
-        self.assertIn("still changing after 1.5s; skipped", open(os.path.join(self.data, "hook.log")).read())
+        self.assertIn("still changing after 1.5s; skipped", self.log())
 
     def test_detached_returns_fast_then_waits_for_stable_transcript(self):
         """The hook returns well inside the 1.5 s budget while the transcript is still being written;
