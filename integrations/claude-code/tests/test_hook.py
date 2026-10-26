@@ -101,11 +101,27 @@ class HookTest(HookFixture):
         self.assertEqual(self.calls_made(), [])
         self.assertIn("unexpected session_id", open(os.path.join(self.data, "hook.log")).read())
 
-    def test_malformed_stdin_is_harmless(self):
-        env = dict(os.environ, SESSION_RECEIPT_AUTO="1", SESSION_RECEIPT_CMD=json.dumps([sys.executable, self.fake]))
-        r = subprocess.run([sys.executable, HOOK], input="not json", env=env, capture_output=True, text=True)
+    def test_malformed_stdin_is_harmless_and_logged(self):
+        for bad in ("not json", "[1, 2]"):
+            with self.subTest(input=bad):
+                r = subprocess.run([sys.executable, HOOK], input=bad, capture_output=True, text=True,
+                                   env=self.hook_env({"SESSION_RECEIPT_AUTO": "1", "SESSION_RECEIPT_FOREGROUND": "1"}))
+                self.assertEqual(r.returncode, 0)
+                self.assertEqual(self.calls_made(), [])
+        self.assertEqual(self.log().count("hook input is not a JSON object; skipped"), 2)
+
+    def test_malformed_stdin_when_disabled_writes_nothing(self):
+        r = subprocess.run([sys.executable, HOOK], input="not json", capture_output=True, text=True,
+                           env=self.hook_env())
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.calls_made(), [])
+        self.assertFalse(os.path.exists(os.path.join(self.data, "hook.log")))
+
+    def test_input_with_a_byte_order_mark_is_read(self):  # what a PowerShell pipe can send
+        r = subprocess.run([sys.executable, HOOK], input=b"\xef\xbb\xbf" + json.dumps(self.event()).encode(),
+                           capture_output=True,
+                           env=self.hook_env({"SESSION_RECEIPT_AUTO": "1", "SESSION_RECEIPT_FOREGROUND": "1"}))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.calls_made()[0]["argv"][:3], ["session", "--id", SID])
 
     def test_missing_transcript_writes_no_receipt(self):
         os.remove(self.transcript)

@@ -209,7 +209,8 @@ always escaped before they reach HTML or SVG.
   which could be one path with spaces, and quotes that do not wrap the whole value. **Migration:**
   the earlier form `/usr/bin/python3 /opt/sr/cli.py` (an absolute path plus arguments) is now
   refused. Write it as `["/usr/bin/python3", "/opt/sr/cli.py"]`. A refused value, or an executable
-  that cannot start (for example, a quoted path that does not exist), is logged to `hook.log`.
+  that cannot start (for example, a quoted path that does not exist), is logged to `hook.log`. So
+  is hook input that is not a JSON object, once automatic receipts are on.
 
 Try it without installing: `claude --plugin-dir integrations/claude-code/session-receipt`.
 Remove it by dropping that flag (or `claude plugin uninstall` if you installed it). The plugin
