@@ -79,6 +79,27 @@ disagreement there stays on the receipt as a warning. The receipt footer says
 five rate types, so no overrides were needed. OpenRouter passes Anthropic's list prices through;
 a spot check against Anthropic's pricing page that day agreed. The tool never writes under `~/.claude` or `~/.codex`.
 
+**If an update fails.** All three files are first built in a staging directory,
+`pricing/.update-*`, the ccusage probes run against that staged copy, and the staged files are
+read back. A download or parse error, a missing or failing ccusage, or any probe error stops
+there, and the active files stay byte-identical. Only then are the files swapped in, one
+`os.replace` per file. Each file is replaced whole, so a reader never sees a half-written file,
+but the three are not replaced together. If one replace fails, the files already replaced are
+put back from copies taken just before, and the command reports that nothing changed. If
+putting one back also fails, the error names the staging directory, which keeps the previous
+files in `previous/`, and you copy them back yourself. What this does not cover:
+
+- A process that is killed, or a machine that loses power, during the swap leaves a mix of old
+  and new files. The swap takes milliseconds. Re-run `update-prices` to finish it, or copy back
+  the files under `pricing/.update-*/previous/`.
+- A receipt made at the same moment can read an old file next to a new one. Its price check
+  then shows a mismatch, and its provenance records the reference date and the overrides hash
+  it actually used.
+- Two `update-prices` runs at the same time are not locked against each other.
+- On Windows, a file another program has open can refuse the replace. That is the
+  "restored, nothing changed" case above; close it and retry. The Windows behaviour of this
+  path is reasoned from how `os.replace` works there, not tested on Windows.
+
 ## How to read the receipt
 
 - **A. Recorded usage**: tokens per model as recorded: output (including thinking/reasoning),

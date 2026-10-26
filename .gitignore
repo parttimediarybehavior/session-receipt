@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 receipts/
 vendor/node_modules/
+pricing/.update-*/
 
 .venv/
 *.egg-info/
