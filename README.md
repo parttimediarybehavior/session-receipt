@@ -55,6 +55,12 @@ Options: `--source claude|codex|both`, `--format html,svg,json`, `--out DIR` (de
 `--codex-home`. `--latest` means the most recent last activity within today and yesterday
 (or `--since/--until`). A missing session exits non-zero with a message.
 
+`--tz` defaults to `$SESSION_RECEIPT_TZ`, then `$TZ`, then the system zone (`/etc/timezone`, or
+the zone `/etc/localtime` links to, as on macOS and Fedora), else `UTC`. Automatic receipts
+(the hook, below) use the same default. Windows has neither file, so set `SESSION_RECEIPT_TZ`
+there (`[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_TZ", "America/Chicago", "User")`)
+rather than `TZ`, which other Windows programs read in a different format.
+
 ## Offline
 
 ccusage always runs with `--offline` (bundled price table). Making a receipt fetches nothing.

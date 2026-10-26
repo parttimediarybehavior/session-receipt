@@ -88,3 +88,54 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDefaultTz(unittest.TestCase):
+    """The --tz default; files are passed in so the real /etc is never read."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp(dir=_tmp)
+        self.none = os.path.join(self.d, "missing")
+
+    def tz(self, environ=None, timezone_file=None, localtime=None):
+        from session_receipt.cli import default_tz
+        return default_tz(environ or {}, timezone_file or self.none, localtime or self.none)
+
+    def link(self, target):
+        path = os.path.join(self.d, "localtime")
+        try:
+            os.symlink(target, path)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlinks here")
+        return path
+
+    def test_nothing_set_is_utc(self):
+        self.assertEqual(self.tz(), "UTC")
+
+    def test_session_receipt_tz_wins_over_tz_and_files(self):
+        self.assertEqual(self.tz({"SESSION_RECEIPT_TZ": "Asia/Tokyo", "TZ": "Europe/Paris"},
+                                 localtime=self.link("/usr/share/zoneinfo/America/Chicago")), "Asia/Tokyo")
+
+    def test_tz_then_etc_timezone(self):
+        f = os.path.join(self.d, "timezone")
+        with open(f, "w") as fh:
+            fh.write("Europe/Berlin\n")
+        self.assertEqual(self.tz({"TZ": "Europe/Paris"}, timezone_file=f), "Europe/Paris")
+        self.assertEqual(self.tz(timezone_file=f), "Europe/Berlin")
+
+    def test_localtime_symlink(self):
+        for target, want in (("/usr/share/zoneinfo/America/Chicago", "America/Chicago"),     # Fedora, Arch
+                             ("/var/db/timezone/zoneinfo/Europe/London", "Europe/London"),   # macOS
+                             ("../usr/share/zoneinfo/posix/Asia/Kolkata", "Asia/Kolkata")):
+            with self.subTest(target=target):
+                self.assertEqual(self.tz(localtime=self.link(target)), want)
+                os.remove(os.path.join(self.d, "localtime"))
+
+    def test_unusable_localtime_is_utc(self):
+        for target in ("/usr/share/zoneinfo/Not/AZone", "/usr/share/zoneinfo/", "/etc/some-copy"):
+            with self.subTest(target=target):
+                self.assertEqual(self.tz(localtime=self.link(target)), "UTC")
+                os.remove(os.path.join(self.d, "localtime"))
+        f = os.path.join(self.d, "plain")
+        open(f, "w").close()
+        self.assertEqual(self.tz(localtime=f), "UTC")  # a copied file, not a symlink

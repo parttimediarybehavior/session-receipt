@@ -16,14 +16,30 @@ class NotFound(ReceiptError):
     pass
 
 
-def default_tz():
-    tz = os.environ.get("TZ")
+def default_tz(environ=os.environ, timezone_file="/etc/timezone", localtime="/etc/localtime"):
+    """--tz default: SESSION_RECEIPT_TZ, TZ, /etc/timezone (Debian, Ubuntu), the zone named by the
+    /etc/localtime symlink (macOS, Fedora, Arch), else UTC. Windows has none of the files, so set
+    SESSION_RECEIPT_TZ there; TZ is read by other Windows programs in a different format."""
+    tz = environ.get("SESSION_RECEIPT_TZ") or environ.get("TZ")
     if not tz:
         try:
-            with open("/etc/timezone") as f:
+            with open(timezone_file) as f:
                 tz = f.read().strip()
         except OSError:
             tz = None
+    if not tz:
+        try:
+            _, sep, name = os.readlink(localtime).rpartition("zoneinfo/")
+        except (OSError, ValueError):
+            sep = name = ""
+        for prefix in ("posix/", "right/"):
+            name = name[len(prefix):] if name.startswith(prefix) else name
+        try:
+            if sep and name:
+                ZoneInfo(name)
+                tz = name
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            pass
     return tz or "UTC"
 
 
