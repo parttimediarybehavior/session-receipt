@@ -295,6 +295,80 @@ class SpacedCommandLaunch(HookFixture):
         self.assertIn("could not start %r" % missing, self.log())
 
 
+PLUGIN = os.path.join(os.path.dirname(__file__), "..", "session-receipt")
+SH = shutil.which("sh") or next((p for p in (r"C:\Program Files\Git\bin\sh.exe",) if os.path.exists(p)), None)
+
+
+@unittest.skipUnless(SH, "needs sh (Git Bash on Windows)")
+class HooksJsonInterpreter(unittest.TestCase):
+    """hooks.json runs the first of python3, python, `py -3` that is Python 3. Fake interpreters on
+    an otherwise empty PATH record what ran; a stub (like the WindowsApps one) fails every call."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.bin = os.path.join(self.tmp, "bin"); os.makedirs(self.bin)
+        self.record = os.path.join(self.tmp, "record")
+        with open(os.path.join(PLUGIN, "hooks", "hooks.json")) as f:
+            self.command = json.load(f)["hooks"]["SessionEnd"][0]["hooks"][0]["command"]
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def fake(self, name, works=True, flag=None):
+        """`flag`: an argument the interpreter must be given first (`py -3`)."""
+        body = "echo 'Python was not found' >&2; exit 9\n"
+        if works:
+            need = '[ "$1" = %s ] || exit 2; shift\n' % flag if flag else ""
+            body = (need + 'if [ "$1" = -c ]; then exit 0; fi\n'
+                    'read -r line; printf "%%s\\n" "%s $*" "$line" > "$SR_RECORD"\n' % name)
+        path = os.path.join(self.bin, name)
+        with open(path, "w", newline="\n") as f:
+            f.write("#!/bin/sh\n" + body)
+        os.chmod(path, 0o755)
+
+    def run_command(self):
+        env = {k: v for k, v in os.environ.items() if k in ("SYSTEMROOT", "TEMP", "TMP")}
+        env.update(PATH=self.bin, CLAUDE_PLUGIN_ROOT=PLUGIN, SR_RECORD=self.record)
+        r = subprocess.run([SH, "-c", self.command], input='{"session_id": "x"}\n', env=env,
+                           capture_output=True, text=True, timeout=30)
+        ran = None
+        if os.path.exists(self.record):
+            with open(self.record) as f:
+                ran = f.read().splitlines()
+        return r, ran
+
+    def assert_ran(self, ran, name):
+        self.assertIsNotNone(ran)
+        self.assertTrue(ran[0].startswith(name + " "), ran)
+        self.assertTrue(ran[0].endswith("/hooks-handlers/session_end.py"), ran)
+        self.assertEqual(ran[1], '{"session_id": "x"}')  # the event still reaches the hook on stdin
+
+    def test_python3_first(self):
+        self.fake("python3"); self.fake("python")
+        r, ran = self.run_command()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assert_ran(ran, "python3")
+
+    def test_stub_python3_falls_back_to_python(self):
+        self.fake("python3", works=False); self.fake("python")
+        r, ran = self.run_command()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assert_ran(ran, "python")
+
+    def test_only_py_launcher(self):
+        self.fake("python3", works=False); self.fake("py", flag="-3")
+        r, ran = self.run_command()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assert_ran(ran, "py")
+
+    def test_no_python_says_so(self):
+        self.fake("python3", works=False)
+        r, ran = self.run_command()
+        self.assertIsNone(ran)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no Python 3 found", r.stderr)
+
+
 if os.name == "nt":
     import ctypes
     from ctypes import wintypes
