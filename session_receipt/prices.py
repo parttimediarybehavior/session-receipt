@@ -11,10 +11,17 @@ https://openrouter.ai/api/v1/models (or reads a saved copy with --from), and wri
 Receipts then cost tokens at the snapshot's prices and print "OpenRouter list as of <date>".
 Models with a long-prompt price tier are never overridden (a flat override would erase the
 tier); a disagreement there stays visible as a price-check warning instead.
+
+All three files are built, probed and read back in a staging directory inside pricing/ first;
+a parse, ccusage or probe failure changes none of the active files. Publishing is then one
+os.replace per file, so each file is swapped whole but the three are not swapped together: if a
+replace fails, the files already replaced are put back. A process killed mid-publish, or a
+receipt read during it, can still see a mix of old and new files (see README, "Prices").
 """
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 from datetime import datetime, timezone
 
@@ -76,6 +83,14 @@ def build_reference(raw, fetched_at):
     return reference, snapshot
 
 
+def _parse(raw, fetched_at):
+    try:
+        return build_reference(raw, fetched_at)
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        raise ad.ReceiptError("could not read the OpenRouter response (%s: %s); nothing written"
+                              % (type(e).__name__, e))
+
+
 def _override_entry(r):
     return {"inputCostPerToken": r["input"] / 1e6, "outputCostPerToken": r["output"] / 1e6,
             "cacheCreationInputTokenCost": r["cache_write_5m"] / 1e6,
@@ -87,37 +102,114 @@ def _write_json(path, obj):
     with open(tmp, "w", newline="\n") as f:
         json.dump(obj, f, indent=1, sort_keys=True)
         f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
+
+
+FILES = ("openrouter-snapshot.json", "reference.json", "ccusage-overrides.json")  # publish order
+
+
+def _publish(stage, pricing_dir):
+    """Replace each active file with its staged copy, then remove `stage`. On any failure, put
+    back every file a replace was attempted on, from copies in stage/previous (or remove it if it
+    is new), and raise. `stage` is removed only after a success or a complete rollback; otherwise
+    it stays, because stage/previous may hold the only copies of the previous files."""
+    prev = os.path.join(stage, "previous")
+    os.makedirs(prev)
+    existed = set()
+    for n in FILES:
+        if os.path.exists(os.path.join(pricing_dir, n)):
+            try:
+                shutil.copyfile(os.path.join(pricing_dir, n), os.path.join(prev, n))
+            except OSError as e:
+                shutil.rmtree(stage, ignore_errors=True)
+                raise ad.ReceiptError("could not copy %s before replacing it (%s); nothing changed" % (n, e))
+            existed.add(n)
+    attempted = []
+    try:
+        for n in FILES:
+            attempted.append(n)  # before the replace: an interrupt can land right after it
+            os.replace(os.path.join(stage, n), os.path.join(pricing_dir, n))
+    except BaseException as e:  # incl. Ctrl-C: never leave a partial set if it can be undone
+        # An OSError from os.replace means that file was not replaced; after an interrupt it may
+        # have been. Restoring a file that was not replaced just rewrites its old bytes.
+        replaced = attempted[:-1] if isinstance(e, OSError) else attempted
+        failed = []
+        for n in reversed(replaced):
+            try:
+                if n in existed:
+                    os.replace(os.path.join(prev, n), os.path.join(pricing_dir, n))
+                else:
+                    try:
+                        os.remove(os.path.join(pricing_dir, n))
+                    except FileNotFoundError:
+                        pass
+            except BaseException:  # incl. a second Ctrl-C; keep going and report it
+                failed.append(n)
+        if failed:
+            raise ad.ReceiptError(
+                "could not replace %s (%s), and could not restore %s; the pricing files may now "
+                "be a mix of old and new. The previous copies are in %s: copy them back into %s "
+                "before making receipts." % (attempted[-1], e, ", ".join(sorted(failed)), prev,
+                                             pricing_dir))
+        shutil.rmtree(stage, ignore_errors=True)
+        if isinstance(e, OSError):
+            raise ad.ReceiptError("could not replace %s (%s); previous pricing files restored, "
+                                  "nothing changed" % (attempted[-1], e))
+        raise
+    shutil.rmtree(stage, ignore_errors=True)
+
+
+def _stage(stage, reference, snapshot):
+    """Write all three candidate files into `stage`, probing ccusage against the staged reference,
+    then read them back. Touches nothing outside `stage`."""
+    ref_path = os.path.join(stage, "reference.json")
+    _write_json(os.path.join(stage, "openrouter-snapshot.json"), snapshot)
+    _write_json(ref_path, reference)
+    # Measure ccusage's built-in rates against the new reference with NO overrides.
+    empty = os.path.join(stage, "empty.json")
+    _write_json(empty, {"defaults": {"pricingOverrides": {}}})
+    overrides, notes = {}, []
+    for key, r in sorted(reference["models"].items()):
+        res = pricecheck.check_model("claude-" + key, empty, use_cache=False, reference_path=ref_path)
+        if res["status"] == "ok":
+            continue
+        fixable = [k for k in res["differing"] if k != "cache_write_1h"]
+        if "tiers" in r:
+            notes.append("%s: ccusage differs on %s; has a long-prompt tier, NOT overridden"
+                         % (key, ", ".join(res["differing"])))
+        elif fixable:
+            overrides["claude-" + key] = _override_entry(r)
+            notes.append("%s: ccusage differs on %s; overridden" % (key, ", ".join(res["differing"])))
+        if "cache_write_1h" in res["differing"]:
+            notes.append("%s: 1-hour cache write differs and ccusage cannot override it" % key)
+    _write_json(os.path.join(stage, "ccusage-overrides.json"), {"defaults": {"pricingOverrides": overrides}})
+    expected = dict(zip(FILES, (snapshot, reference, {"defaults": {"pricingOverrides": overrides}})))
+    for n, obj in expected.items():
+        with open(os.path.join(stage, n)) as f:
+            if json.load(f) != obj:
+                raise ad.ReceiptError("staged %s did not read back as written; nothing replaced" % n)
+    return overrides, notes
 
 
 def update(raw, fetched_at=None, pricing_dir=PRICING_DIR, log=print):
     fetched_at = fetched_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    reference, snapshot = build_reference(raw, fetched_at)
+    reference, snapshot = _parse(raw, fetched_at)
     if not reference["models"]:
         raise ad.ReceiptError("no Claude prices found in the OpenRouter response; nothing written")
-    ref_path = os.path.join(pricing_dir, "reference.json")
-    ovr_path = os.path.join(pricing_dir, "ccusage-overrides.json")
-    _write_json(os.path.join(pricing_dir, "openrouter-snapshot.json"), snapshot)
-    _write_json(ref_path, reference)
-    # Measure ccusage's built-in rates against the new reference with NO overrides.
-    with tempfile.TemporaryDirectory(prefix="sr_up_") as t:
-        empty = os.path.join(t, "empty.json")
-        _write_json(empty, {"defaults": {"pricingOverrides": {}}})
-        overrides, notes = {}, []
-        for key, r in sorted(reference["models"].items()):
-            res = pricecheck.check_model("claude-" + key, empty, use_cache=False, reference_path=ref_path)
-            if res["status"] == "ok":
-                continue
-            fixable = [k for k in res["differing"] if k != "cache_write_1h"]
-            if "tiers" in r:
-                notes.append("%s: ccusage differs on %s; has a long-prompt tier, NOT overridden"
-                             % (key, ", ".join(res["differing"])))
-            elif fixable:
-                overrides["claude-" + key] = _override_entry(r)
-                notes.append("%s: ccusage differs on %s; overridden" % (key, ", ".join(res["differing"])))
-            if "cache_write_1h" in res["differing"]:
-                notes.append("%s: 1-hour cache write differs and ccusage cannot override it" % key)
-    _write_json(ovr_path, {"defaults": {"pricingOverrides": overrides}})
+    # Stage next to the active files (same filesystem, so os.replace does not copy).
+    try:
+        stage = tempfile.mkdtemp(prefix=".update-", dir=pricing_dir)
+    except OSError as e:
+        raise ad.ReceiptError("could not create a staging directory in %s (%s); nothing written"
+                              % (pricing_dir, e))
+    try:
+        overrides, notes = _stage(stage, reference, snapshot)
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)  # nothing active was touched yet
+        raise
+    _publish(stage, pricing_dir)  # removes the stage itself, unless it holds the only old copies
     log("prices as of %s from %s: %d Claude models, %d override(s)"
         % (reference["as_of"], URL, len(reference["models"]), len(overrides)))
     for n in notes:
