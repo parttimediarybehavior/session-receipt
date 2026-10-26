@@ -91,7 +91,9 @@ a spot check against Anthropic's pricing page that day agreed. The tool never wr
   litres of water and kg CO2e. These are illustrative scenarios built from cited estimates and
   flagged assumptions. None is measured and they are not bounds. Sources: `session_receipt/SOURCES.md`.
 - **Where the numbers came from**: ccusage version, price table date and check status, timezone,
-  generation time. Counts include subagents; streamed duplicates are removed.
+  generation time. Claude Code counts include subagents, and streamed duplicates are removed.
+  Each Codex subagent thread is its own rollout, so it gets its own Codex session receipt and is
+  not part of its parent's; Codex daily receipts include every thread.
 - **PROVISIONAL** appears when the last activity is within 2 minutes of generation time, or the
   window includes today.
 - **Price check**: `pricecheck` measures the rates ccusage actually applies (five probe
@@ -116,6 +118,20 @@ always escaped before they reach HTML or SVG.
   Codex prices are not checked against the snapshot yet, so they read "unverified". A model
   ccusage cannot price reads "unknown" and the subtotal is partial (or unknown if no model in
   it is priced). Allocating cost across models is never guessed.
+- Codex count check: ccusage 20.0.38 can drop a spawned subagent thread's usage (seen: a
+  one-response subagent whose `token_count` event is written twice). Newer Codex rollouts record
+  every response in a `token_usage_record` line, so Codex receipts add those up (token numbers
+  and timestamps only) and compare. When ccusage counted less, the receipt says
+  "undercount: the Codex logs record N tokens that ccusage did not count"; the counts and cost stay
+  ccusage's. JSON carries `count_check` (`ok`, `undercount`, or `not_checked` for older rollouts
+  without those lines). This is the one place the tool reads a raw log itself.
+- Ambiguous records are counted as ccusage counts them, not reinterpreted:
+  - A **model fallback** record (top-level model is the fallback, `iterations` show a failed
+    first attempt on another model) is booked to the fallback model, including the cache writes
+    in its `cache_creation` breakdown; the first attempt's usage is not counted. The log does not
+    say whether that attempt was billed.
+  - A message whose duplicate copies **straddle local midnight** goes to the day of the copy
+    kept (the one with the largest output; on a tie, the first copy).
 - **Turn-level attribution: not supported.** Usage is recorded per streamed API message, not
   per user turn; a turn spans several messages and subagents, and ccusage exposes no turn
   boundaries. Task attribution across sessions is also out of scope.

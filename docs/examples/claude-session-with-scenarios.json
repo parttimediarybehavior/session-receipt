@@ -4,6 +4,7 @@
   "privacy": "public",
   "receipts": [
     {
+      "count_check": null,
       "environmental_scenarios": {
         "caveat": "Illustrative scenarios, not measurements",
         "levels": {

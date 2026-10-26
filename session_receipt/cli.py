@@ -8,7 +8,7 @@ from datetime import timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import ccusage_adapter as ad
-from . import export_json, pricecheck, prices, render_html, render_svg
+from . import codex_check, export_json, pricecheck, prices, render_html, render_svg
 from .ccusage_adapter import ReceiptError
 
 
@@ -119,6 +119,9 @@ def select_sessions(args, now):
         if hits and (since or until):
             full = {r.session_id: r for r in _fetch_sessions(src, args, tz, None, None)}
             hits = [full[r.session_id] for r in hits]
+        if src == "codex":
+            for r in hits:
+                codex_check.check_session(r, args.codex_home)
         found += hits
     if not found:
         if args.id:
@@ -130,16 +133,29 @@ def select_sessions(args, now):
 
 def select_daily(args):
     tz = _tz(args.tz)
-    found = []
+    found, uncounted = [], 0
     for src in _sources(args):
         if src == "claude":
             days = ad.fetch_claude_daily(tz, args.date, args.date, claude_dir=args.claude_dir)
         else:
             days = ad.fetch_codex_daily(tz, args.date, args.date, codex_home=args.codex_home)
-        found += [d for d in days if d.window_start == args.date]
+        hits = [d for d in days if d.window_start == args.date]
+        if src == "codex":
+            if hits:
+                day_sessions = ad.fetch_codex_sessions(tz, args.date, args.date, codex_home=args.codex_home)
+                codex_check.check_daily(hits[0], day_sessions, args.codex_home)
+            else:
+                uncounted = sum(codex_check.day_log(args.date, tz, args.codex_home).values())
+                if uncounted and found:
+                    print("warning: ccusage counted no Codex usage for %s, but the Codex logs record %s "
+                          "tokens that day; this receipt has no Codex block." % (args.date, "{:,}".format(uncounted)),
+                          file=sys.stderr)
+        found += hits
     if not found:
-        raise NotFound("no usage recorded for %s (%s) in source(s): %s"
-                       % (args.date, tz, ", ".join(_sources(args))))
+        extra = ("; the Codex logs do record %s tokens that day, which ccusage did not count"
+                 % "{:,}".format(uncounted)) if uncounted else ""
+        raise NotFound("no usage recorded for %s (%s) in source(s): %s%s"
+                       % (args.date, tz, ", ".join(_sources(args)), extra))
     return found
 
 

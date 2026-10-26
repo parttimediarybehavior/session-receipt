@@ -4,6 +4,7 @@
   "privacy": "public",
   "receipts": [
     {
+      "count_check": null,
       "kind": "session",
       "label": "one session (session #6a9871)",
       "models": [

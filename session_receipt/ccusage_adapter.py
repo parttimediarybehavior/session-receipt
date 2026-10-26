@@ -47,6 +47,7 @@ class Receipt:
     totals: dict = field(default_factory=dict)
     unpriced: list = field(default_factory=list)
     provisional: bool = False
+    count_check: Optional[dict] = None  # Codex only: ccusage counts vs the rollouts' own records
     tool_version: str = ""
     pricing_provenance: dict = field(default_factory=dict)
     # private-only fields (omitted from public exports)
@@ -161,7 +162,9 @@ def _finish_claude(r, models, session_cost, ver, prov):
     r.models = models
     r.unpriced = [m.name for m in models if m.cost_usd is None]
     t = _totals(models)
-    t["cost_usd"] = round(sum(m.cost_usd for m in models if m.cost_usd is not None), 12)
+    priced = [m.cost_usd for m in models if m.cost_usd is not None]
+    # Unknown price is never $0: with no priced model the total is unknown, as on the Codex path.
+    t["cost_usd"] = round(sum(priced), 12) if priced else None
     t["partial"] = bool(r.unpriced)
     t["total_tokens"] = t["input"] + t["output"] + t["cache_write"] + t["cache_read"]
     r.totals = t
