@@ -65,14 +65,37 @@ def short_id(session_id):
     return hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:6]
 
 
+# Native ccusage builds that can run on each machine type Python reports on Windows. npm installs
+# the build for Node's process.arch, which differs from Python's when x64 and ARM64 installs are
+# mixed on Windows on Arm. x64 builds run there under emulation; an ARM64 build never runs on x64.
+# platform.machine() is the CPU (via WMI) on Python 3.12+, but an emulated x64 Python before 3.12
+# reports AMD64 on Arm, so it can refuse a usable ARM64 build; it never picks an unusable one.
+WIN_COMPATIBLE = {"arm64": ("arm64", "x64"), "aarch64": ("arm64", "x64"),
+                  "amd64": ("x64",), "x86_64": ("x64",)}
+
+
+def windows_binary(modules, machine):
+    """The installed ccusage.exe that runs on `machine`, preferring the native build."""
+    path = lambda arch: os.path.join(modules, "@ccusage", "ccusage-win32-" + arch, "bin", "ccusage.exe")
+    compatible = WIN_COMPATIBLE.get(machine.lower(), ())
+    for arch in compatible:
+        if os.path.isfile(path(arch)):
+            return path(arch)
+    installed = [a for a in ("x64", "arm64") if os.path.isfile(path(a))]
+    raise ReceiptError(
+        "ccusage binary not found for this machine (%s; runs: %s; installed: %s). Run `npm ci "
+        "--prefix vendor` with a Node.js build for this machine, or set SESSION_RECEIPT_CCUSAGE "
+        "to a ccusage executable." % (machine, ", ".join(compatible) or "none",
+                                      ", ".join(installed) or "none"))
+
+
 def _default_binary():
     modules = os.path.join(ROOT, "vendor", "node_modules")
     if os.name != "nt":
         return os.path.join(modules, ".bin", "ccusage")
     # On Windows .bin/ccusage is a POSIX shell shim. The ccusage npm launcher only forwards argv
     # to its per-platform native binary, so call that .exe directly.
-    arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
-    return os.path.join(modules, "@ccusage", "ccusage-win32-" + arch, "bin", "ccusage.exe")
+    return windows_binary(modules, platform.machine())
 
 
 def find_binary():

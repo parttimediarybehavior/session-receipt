@@ -37,11 +37,27 @@ def enabled():
 
 
 def cli_cmd():
-    cmd = os.environ.get("SESSION_RECEIPT_CMD")
-    if cmd:
-        return cmd.split()
-    exe = shutil.which("session-receipt")
-    return [exe] if exe else None
+    """The argv prefix that runs the CLI; never run through a shell. SESSION_RECEIPT_CMD is one of:
+    - a JSON array of strings, the general form: ["C:/Users/Jane Doe/.venv/Scripts/python.exe", "-m", "session_receipt"]
+    - an absolute path to an existing executable, spaces allowed, optionally in double quotes
+    - words separated by whitespace, none containing a space: python3 /opt/sr/cli.py
+    Unset: `session-receipt` on PATH. Raises ValueError for a malformed JSON array."""
+    cmd = os.environ.get("SESSION_RECEIPT_CMD", "").strip()
+    if not cmd:
+        exe = shutil.which("session-receipt")
+        return [exe] if exe else None
+    if cmd.startswith("["):
+        try:
+            argv = json.loads(cmd)
+        except ValueError as e:
+            raise ValueError(f"SESSION_RECEIPT_CMD is not a valid JSON array ({e})")
+        if not (isinstance(argv, list) and argv and all(isinstance(a, str) and a for a in argv)):
+            raise ValueError("SESSION_RECEIPT_CMD must be a JSON array of non-empty strings")
+        return argv
+    path = cmd[1:-1] if len(cmd) > 1 and cmd[0] == cmd[-1] == '"' else cmd
+    if os.path.isabs(path) and os.path.isfile(path):
+        return [path]
+    return cmd.split()
 
 
 def wait_stable(path):
@@ -67,9 +83,15 @@ def worker(event):
     os.makedirs(out, exist_ok=True)
     log = os.path.join(data_dir(), "hook.log")
     stable = wait_stable(event.get("transcript_path"))
-    cmd = cli_cmd()
+    try:
+        cmd, cmd_error = cli_cmd(), None
+    except ValueError as e:
+        cmd, cmd_error = None, str(e)
     with open(log, "a") as fh:
         stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        if cmd_error:
+            fh.write(f"{stamp} {cmd_error}; skipped\n")
+            return 3
         if not cmd:
             fh.write(f"{stamp} session-receipt not found on PATH and SESSION_RECEIPT_CMD unset; skipped\n")
             return 3
@@ -83,9 +105,13 @@ def worker(event):
         full = cmd + ["session", "--id", sid, "--out", out]
         # CREATE_NO_WINDOW (Windows only; 0 elsewhere): a detached worker has no console, so a
         # console child would otherwise pop up a window of its own.
-        r = subprocess.run(full, capture_output=True, text=True, timeout=300,
-                           env=dict(os.environ, SESSION_RECEIPT_IN_HOOK="1"),
-                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            r = subprocess.run(full, capture_output=True, text=True, timeout=300,
+                               env=dict(os.environ, SESSION_RECEIPT_IN_HOOK="1"),
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as e:  # e.g. a SESSION_RECEIPT_CMD path that does not exist
+            fh.write(f"{stamp} could not start {cmd[0]!r}: {e}; skipped\n")
+            return 6
         fh.write(f"{stamp} reason={event.get('reason')} transcript_stable={stable} rc={r.returncode}\n")
         if r.returncode:
             fh.write(r.stderr[-2000:] + "\n")

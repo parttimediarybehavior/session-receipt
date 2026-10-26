@@ -45,10 +45,38 @@ npm ci --prefix vendor
 
 - Running without installing (`py -m session_receipt`) needs `py -m pip install tzdata` first.
 - Pass `--tz`: there is no `/etc/timezone`, so the default is `UTC` unless `TZ` is set.
-- ccusage is called as its native `ccusage.exe` (`vendor/node_modules/@ccusage/ccusage-win32-<arch>/`).
-- The SessionEnd hook detaches with `DETACHED_PROCESS` instead of `fork`. Its command is `python3`,
-  run through Claude Code's shell (Git Bash), so `python3` must resolve there. The Windows CI job
-  runs the hook tests, but the hook has not been checked inside a real Claude Code session on Windows.
+- ccusage runs as the native `ccusage.exe` that npm installed under `vendor/node_modules/@ccusage/`.
+  npm picks the build for your Node.js (`process.arch`), which on Windows on Arm can differ from
+  your Python. If Python reports ARM64, the ARM64 build is used, or else the x64 build (Windows 11
+  on Arm runs x64 under emulation). If Python reports x64, only the x64 build is used; an ARM64
+  build is never picked. (Python 3.12+ reports the CPU; an x64 Python 3.10/3.11 running under
+  emulation on Arm reports x64.) If none fits, the error names what is installed: rerun `npm ci --prefix vendor`
+  with a Node.js built for this machine, or set `SESSION_RECEIPT_CCUSAGE` to a ccusage executable.
+
+Automatic receipts (the SessionEnd hook, below) on Windows, in PowerShell from the checkout. Paths
+with spaces are fine:
+
+```
+# Where the hook finds the CLI. The value is stored without quotes.
+[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_CMD", (Resolve-Path .venv\Scripts\session-receipt.exe).Path, "User")
+# Opt in.
+New-Item -ItemType Directory -Force "$HOME\.config\session-receipt" | Out-Null
+New-Item -ItemType File -Force "$HOME\.config\session-receipt\auto-enabled" | Out-Null
+```
+
+Close and reopen your terminal app before starting Claude Code: a user environment variable
+reaches only processes started after it is set. To pass arguments, use the JSON form, with forward
+slashes (or `\\`) in paths: `'["C:/Users/Jane Doe/session-receipt/.venv/Scripts/python.exe", "-m", "session_receipt"]'`.
+
+- The hook command is `python3`, run through Claude Code's shell (Git Bash), so `python3` must
+  resolve to a real Python there (`command -v python3 && python3 --version` in Git Bash). The
+  Microsoft Store alias in `WindowsApps` only prints a message.
+- The hook detaches with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`, plus `CREATE_BREAKAWAY_FROM_JOB`
+  when its job allows it (it retries without breakaway otherwise). Windows CI runs the hook inside
+  real job objects of each kind. The worker survives the closing of a kill-on-close job that allows
+  breakaway, including the kind libuv (Node's process layer) gives its children. It does not survive
+  the closing of a kill-on-close job that forbids breakaway. Which kind Claude Code uses, and whether
+  it kills process trees at exit, has not been checked inside a real Claude Code session on Windows.
 
 ## Try it with no real logs
 
@@ -156,7 +184,15 @@ always escaped before they reach HTML or SVG.
   the transcript to stop changing. It never calls a model or starts Claude Code, so it cannot
   trigger a turn; a nested-run guard (`SESSION_RECEIPT_IN_HOOK`) stops recursion. Receipts and
   `hook.log` go to the plugin data dir (`$CLAUDE_PLUGIN_DATA`) or `~/.local/share/session-receipt/`.
-  It needs `session-receipt` on PATH (`pip install -e .`) or `SESSION_RECEIPT_CMD`.
+  It needs `session-receipt` on PATH (`pip install -e .`) or `SESSION_RECEIPT_CMD`, which is never
+  run through a shell and takes one of three forms:
+  - a JSON array of strings, the general form, where any part may contain spaces:
+    `["/opt/my tools/python3", "-m", "session_receipt"]`
+  - an absolute path to the executable, spaces allowed, double quotes optional:
+    `C:\Users\Jane Doe\session-receipt\.venv\Scripts\session-receipt.exe`
+  - words separated by spaces, none containing a space (the original form): `python3 /opt/sr/cli.py`
+
+  A malformed value, or an executable that cannot start, is logged to `hook.log`.
 
 Try it without installing: `claude --plugin-dir integrations/claude-code/session-receipt`.
 Remove it by dropping that flag (or `claude plugin uninstall` if you installed it). The plugin
