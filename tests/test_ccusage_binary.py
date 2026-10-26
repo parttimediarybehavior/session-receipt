@@ -58,7 +58,7 @@ class WindowsBinary(unittest.TestCase):
 
     def test_default_binary_on_windows_uses_reported_machine(self):
         root = tempfile.mkdtemp()
-        m = self.modules("x64", base=os.path.join(root, "vendor", "node_modules"))
+        m = self.modules("x64", base=os.path.join(root, "node_modules"))
         with mock.patch.object(ad, "ROOT", root), mock.patch.object(ad.os, "name", "nt"), \
                 mock.patch.object(ad.platform, "machine", return_value="ARM64"):
             self.assertEqual(ad._default_binary(),

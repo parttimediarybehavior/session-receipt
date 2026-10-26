@@ -88,7 +88,7 @@ def run(*args):
     return r, json.loads(get(".json")), " ".join(re.findall(r"<text[^>]*>([^<]*)</text>", svg)), get(".html")
 
 
-@unittest.skipUnless(CCUSAGE_PRESENT, "needs vendor ccusage")
+@unittest.skipUnless(CCUSAGE_PRESENT, "needs ccusage (npm ci)")
 class F1ClaudeAllUnpriced(unittest.TestCase):
     def test_total_is_unknown_not_zero(self):
         home = tempfile.mkdtemp()
@@ -103,7 +103,7 @@ class F1ClaudeAllUnpriced(unittest.TestCase):
             self.assertNotIn("$0.0000", visible + html)
 
 
-@unittest.skipUnless(CCUSAGE_PRESENT, "needs vendor ccusage")
+@unittest.skipUnless(CCUSAGE_PRESENT, "needs ccusage (npm ci)")
 class F2CodexCountCheck(unittest.TestCase):
     def test_dropped_subagent_is_reported_on_the_daily_receipt(self):
         home = tempfile.mkdtemp()
@@ -225,7 +225,7 @@ class F2CodexCountCheck(unittest.TestCase):
         self.assertNotIn("undercount", visible)
 
 
-@unittest.skipUnless(CCUSAGE_PRESENT, "needs vendor ccusage")
+@unittest.skipUnless(CCUSAGE_PRESENT, "needs ccusage (npm ci)")
 class F3SubagentWording(unittest.TestCase):
     def test_codex_session_footer_does_not_claim_subagents(self):
         home = tempfile.mkdtemp()

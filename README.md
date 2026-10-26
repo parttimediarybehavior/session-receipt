@@ -10,73 +10,120 @@ Regenerate the examples with `python3 examples/build_docs.py --png`.
 A local command-line tool that turns your Claude Code (and, experimentally, Codex) usage logs
 into a nutrition-label style receipt: recorded token usage, an API-equivalent cost estimate,
 and (optionally) illustrative environmental scenarios. Accounting is plain deterministic code.
-There are no model calls, and receipts make no network calls (the one-time `npm ci` below
-downloads ccusage from the npm registry; `update-prices` downloads the price list, only when
-you run it).
+There are no model calls, and receipts make no network calls (installing downloads ccusage from
+the npm registry once; `update-prices` downloads the price list, only when you run it).
 
-## Install (from source)
+## Install
+
+You need Python 3.10 or later and Node.js (which includes npm). There is no `pip install` and no
+virtual environment to set up, except that on Windows Python also needs the `tzdata` package.
+
+### As a Claude Code plugin
+
+In Claude Code 2.1.275 or later:
+
+```
+/plugin install session-receipt --marketplace parttimediarybehavior/session-receipt
+```
+
+On older versions:
+
+```
+/plugin marketplace add parttimediarybehavior/session-receipt
+/plugin install session-receipt@session-receipt
+```
+
+Claude Code installs the pinned ccusage 20.0.38 (MIT) with the plugin. Then ask Claude for a
+receipt, or run `/session-receipt:receipt`. If something is missing, the skill runs
+`session-receipt doctor`, which checks Python, the time zone database and ccusage, and prints the
+exact fix for each problem. On Windows the first run usually asks for one extra command, which
+adds `tzdata` to your Python (see [Windows](#windows)).
+
+The plugin has no version number, so every new commit is an update. Turn on auto-update for the
+`session-receipt` marketplace in `/plugin`, or run `claude plugin update session-receipt@session-receipt`.
+Remove it with `claude plugin uninstall session-receipt@session-receipt`.
+
+### Without the plugin
+
+One line on macOS and Linux:
+
+```
+git clone https://github.com/parttimediarybehavior/session-receipt.git && npm ci --prefix session-receipt && session-receipt/bin/session-receipt doctor
+```
+
+One line on Windows (PowerShell):
+
+```
+git clone https://github.com/parttimediarybehavior/session-receipt.git; npm ci --prefix session-receipt; session-receipt\bin\session-receipt.cmd doctor
+```
+
+Then run `session-receipt/bin/session-receipt` (on Windows, `session-receipt\bin\session-receipt.cmd`),
+or add that `bin` folder to your PATH. To try it with synthetic data:
+`session-receipt/bin/session-receipt demo --out sr_demo --now 2026-01-06T12:00:00Z`. To remove it,
+delete the folder.
+
+### For development
 
 ```
 git clone https://github.com/parttimediarybehavior/session-receipt.git
 cd session-receipt
-npm ci --prefix vendor                 # installs the pinned ccusage 20.0.38 (MIT)
+npm ci
 python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/session-receipt demo --out /tmp/sr_demo --now 2026-01-06T12:00:00Z   # synthetic demo
+python3 -m unittest discover -s tests
 ```
 
-Editable/source install only; no wheel is published. Python 3.10+ standard library only (plus `tzdata` on
-Windows), plus Node.js for `npm ci` (tested with Node 18.19). ccusage ships a native binary per platform
-(darwin/linux/win32, x64/arm64); **only Linux x64 and Windows 10 x64 have been tested on real
-logs** (Windows by hand on one machine; CI on Windows uses synthetic fixtures only; see
-[Windows](#windows)). For an offline machine, run `npm ci --prefix vendor` elsewhere and copy
-`vendor/node_modules/` across, or point `SESSION_RECEIPT_CCUSAGE` at an existing ccusage 20.0.38.
-Uninstall: `pip uninstall session-receipt` and delete the project directory (nothing is written outside it except the
-optional price-check cache in `~/.cache/session-receipt/`, or `$SESSION_RECEIPT_CACHE_DIR`).
-You can also run it without installing: `python3 -m session_receipt ...` from the project root.
+No wheel is published. The code uses the Python standard library only (plus `tzdata` on Windows).
+ccusage ships a native binary per platform (darwin/linux/win32, x64/arm64); **only Linux x64 and
+Windows 10 x64 have been tested on real logs** (Windows by hand on one machine; CI on Windows
+uses synthetic fixtures only; see [Windows](#windows)). For an offline machine, run `npm ci`
+elsewhere and copy `node_modules/` across, or point `SESSION_RECEIPT_CCUSAGE` at an existing
+ccusage 20.0.38. Nothing is written outside the project folder except receipts where you ask for
+them, the optional price-check cache in `~/.cache/session-receipt/` (or
+`$SESSION_RECEIPT_CACHE_DIR`), and the automatic receipts described under
+[Claude Code plugin](#claude-code-plugin).
 
 ### Windows
 
-```
-py -m venv .venv
-.venv\Scripts\pip install -e .         # also installs tzdata: Windows has no IANA time zone database
-npm ci --prefix vendor
-.venv\Scripts\session-receipt session --latest --tz America/New_York
-```
+- Windows has no IANA time zone database, so Python needs the `tzdata` package. `session-receipt
+  doctor` prints the install command for the Python it uses, written for PowerShell. For example:
 
-- Running without installing (`py -m session_receipt`) needs `py -m pip install tzdata` first.
+  ```powershell
+  & "C:\Users\Jane Doe\AppData\Local\Programs\Python\Python313\python.exe" -m pip install --user tzdata
+  ```
+
+  The `&` lets PowerShell run a quoted path. In Command Prompt, leave out the `& `. A development
+  install (`pip install -e .`) adds `tzdata` for you. On macOS and Linux the system usually has the
+  database already; if not, doctor prints the same command for your shell, without the `&`.
 - Set `SESSION_RECEIPT_TZ` once, or pass `--tz`. Windows has no `/etc/timezone`, so otherwise the
   default is `UTC`. [Report on real usage](#report-on-real-usage) shows the PowerShell command.
-- ccusage runs as the native `ccusage.exe` that npm installed under `vendor/node_modules/@ccusage/`.
+- ccusage runs as the native `ccusage.exe` that npm installed under `node_modules/@ccusage/`.
   npm picks the build for your Node.js (`process.arch`), which on Windows on Arm can differ from
   your Python. If Python reports ARM64, the ARM64 build is used, or else the x64 build (Windows 11
   on Arm runs x64 under emulation). If Python reports x64, only the x64 build is used; an ARM64
   build is never picked. (Python 3.12+ reports the CPU; an x64 Python 3.10/3.11 running under
-  emulation on Arm reports x64.) If none fits, the error names what is installed: rerun `npm ci --prefix vendor`
+  emulation on Arm reports x64.) If none fits, the error names what is installed: rerun `npm ci`
   with a Node.js built for this machine, or set `SESSION_RECEIPT_CCUSAGE` to a ccusage executable.
 
-Automatic receipts (the SessionEnd hook, below) on Windows, in PowerShell from the checkout. Paths
-with spaces are fine:
+Automatic receipts (the SessionEnd hook, below) on Windows: opt in from PowerShell. The hook runs
+the CLI that came with it, so nothing else needs setting up:
 
 ```
-# Where the hook finds the CLI, as a JSON array: ["C:\\Users\\Jane Doe\\...\\session-receipt.exe"]
-$cli = (Resolve-Path .venv\Scripts\session-receipt.exe).Path
-[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_CMD", (ConvertTo-Json -InputObject @($cli) -Compress), "User")
-# Opt in.
 New-Item -ItemType Directory -Force "$HOME\.config\session-receipt" | Out-Null
 New-Item -ItemType File -Force "$HOME\.config\session-receipt\auto-enabled" | Out-Null
 ```
 
-Close and reopen your terminal app before starting Claude Code: a user environment variable
-reaches only processes started after it is set. Arguments go in the same array, for example
-`ConvertTo-Json -InputObject @("C:\Users\Jane Doe\session-receipt\.venv\Scripts\python.exe", "-m", "session_receipt") -Compress`.
+To run a different copy instead, set `SESSION_RECEIPT_CMD` to a JSON array, for example
+`[Environment]::SetEnvironmentVariable("SESSION_RECEIPT_CMD", (ConvertTo-Json -InputObject @("C:\Users\Jane Doe\sr\.venv\Scripts\session-receipt.exe") -Compress), "User")`,
+then close and reopen your terminal app: a user environment variable reaches only processes
+started after it is set.
 
 - Claude Code runs the hook as `node hooks-handlers/run_hook.js`, with no shell, so it works the
   same whether Claude Code uses Git Bash or PowerShell. It needs Node.js on PATH, which installing
   ccusage needs anyway. `run_hook.js` starts the hook with the first of `python3`, `python` and
-  `py -3` that is Python 3. The python.org installer provides `python` and `py` but no `python3`.
-  A `python3` in `WindowsApps` is either a real Microsoft Store Python or a stub that only prints a
-  message; the hook skips a stub. If none of them starts, the hook exits 1 and writes no receipt
-  and no `hook.log`.
+  `py -3` that is Python 3.10 or later. The python.org installer provides `python` and `py` but no
+  `python3`. A `python3` in `WindowsApps` is either a real Microsoft Store Python or a stub that
+  only prints a message; the hook skips a stub. If none of them starts, the hook exits 1 and
+  writes no receipt and no `hook.log`.
 - The hook detaches with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`, plus `CREATE_BREAKAWAY_FROM_JOB`
   when its job allows it (it retries without breakaway otherwise). Windows CI runs the hook inside
   real kill-on-close job objects that are closed as soon as the hook returns. With the kind libuv
@@ -96,6 +143,11 @@ python3 -m session_receipt demo --out /tmp/sr_demo --now 2026-01-06T12:00:00Z
 ```
 
 This builds synthetic fixtures (fake paths, fake content) and renders HTML, SVG and JSON.
+
+The examples here run from the project folder. Anywhere else, use the launcher in place of
+`python3 -m session_receipt`: `bin/session-receipt` (`bin\session-receipt.cmd` on Windows), or
+just `session-receipt` inside Claude Code with the plugin. On Windows, `python3` may not exist;
+`py -m session_receipt` works from the project folder.
 
 ## Report on real usage
 
@@ -233,9 +285,9 @@ always escaped before they reach HTML or SVG.
 - Long-prompt tiers (e.g. haiku-5-5 above 100K) are applied by ccusage and recorded in the
   reference, but the price check probes only the standard tier.
 
-## Claude Code plugin (optional)
+## Claude Code plugin
 
-`integrations/claude-code/session-receipt/` is a Claude Code plugin with:
+The repository is itself a Claude Code plugin and its own marketplace (see [Install](#install)). It has:
 
 - a `/session-receipt:receipt` skill: asks Claude to run this CLI for the current session
   (`${CLAUDE_SESSION_ID}`), today, or a date. Claude reports what the CLI printed; it does not
@@ -249,9 +301,9 @@ always escaped before they reach HTML or SVG.
   trigger a turn; a nested-run guard (`SESSION_RECEIPT_IN_HOOK`) stops recursion. Receipts and
   `hook.log` go to the plugin data dir (`$CLAUDE_PLUGIN_DATA`) or `~/.local/share/session-receipt/`.
   Claude Code starts it with `node`, with no shell, and it runs with the first of `python3`,
-  `python` and `py -3` that is Python 3.
-  It needs `session-receipt` on PATH (`pip install -e .`) or `SESSION_RECEIPT_CMD`, which is never
-  run through a shell. It is read by its syntax alone, never by which files exist, as one of:
+  `python` and `py -3` that is Python 3.10 or later. It runs the CLI that came with it. To run a
+  different copy, set `SESSION_RECEIPT_CMD`, which is never run through a shell. It is read by its
+  syntax alone, never by which files exist, as one of:
   - a JSON array of strings (recommended; any part may contain spaces):
     `["/opt/my tools/python3", "-m", "session_receipt"]`
   - the whole value in double quotes: one executable path, spaces allowed, no arguments:
@@ -266,9 +318,11 @@ always escaped before they reach HTML or SVG.
   that cannot start (for example, a quoted path that does not exist), is logged to `hook.log`. So
   is hook input that is not a JSON object, once automatic receipts are on.
 
-Try it without installing: `claude --plugin-dir integrations/claude-code/session-receipt`.
-Remove it by dropping that flag (or `claude plugin uninstall` if you installed it). The plugin
-never edits your settings or hooks. Hook tests: `python3 -m unittest discover -s integrations/claude-code/tests`.
+- a `bin/session-receipt` launcher, which Claude Code puts on the Bash tool's PATH. It runs the CLI
+  from the plugin folder with no `pip install`.
+
+Try a checkout without installing: `claude --plugin-dir .` from the project folder (run `npm ci`
+there first). Remove it by dropping that flag. The plugin never edits your settings or hooks.
 
 Codex: no skill or hook is provided. Codex *reports* (above) are a separate capability from
 any automatic Codex integration, which is not built.

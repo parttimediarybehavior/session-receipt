@@ -85,13 +85,13 @@ def windows_binary(modules, machine):
     installed = [a for a in ("x64", "arm64") if os.path.isfile(path(a))]
     raise ReceiptError(
         "ccusage binary not found for this machine (%s; runs: %s; installed: %s). Run `npm ci "
-        "--prefix vendor` with a Node.js build for this machine, or set SESSION_RECEIPT_CCUSAGE "
+        "--prefix \"%s\"` with a Node.js build for this machine, or set SESSION_RECEIPT_CCUSAGE "
         "to a ccusage executable." % (machine, ", ".join(compatible) or "none",
-                                      ", ".join(installed) or "none"))
+                                      ", ".join(installed) or "none", ROOT))
 
 
 def _default_binary():
-    modules = os.path.join(ROOT, "vendor", "node_modules")
+    modules = os.path.join(ROOT, "node_modules")
     if os.name != "nt":
         return os.path.join(modules, ".bin", "ccusage")
     # On Windows .bin/ccusage is a POSIX shell shim. The ccusage npm launcher only forwards argv
@@ -104,8 +104,9 @@ def find_binary():
     path = env or _default_binary()
     if not (os.path.isfile(path) and os.access(path, os.X_OK)):
         raise ReceiptError(
-            "ccusage binary not found at %s. Run `npm ci --prefix vendor` in the project "
-            "root, or set SESSION_RECEIPT_CCUSAGE to a ccusage executable." % path)
+            "ccusage binary not found at %s. Run `npm ci --prefix \"%s\"` (needs Node.js), or set "
+            "SESSION_RECEIPT_CCUSAGE to a ccusage executable. `session-receipt doctor` checks the "
+            "whole setup." % (path, ROOT))
     return path
 
 

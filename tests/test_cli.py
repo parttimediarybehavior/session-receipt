@@ -42,7 +42,8 @@ class TestCli(unittest.TestCase):
                          env={"SESSION_RECEIPT_CCUSAGE": "/nonexistent/ccusage"})
         self.assertEqual(rc, 1)
         self.assertIn("ccusage binary not found", se)
-        self.assertIn("npm ci --prefix vendor", se)
+        self.assertIn("npm ci --prefix", se)
+        self.assertIn("session-receipt doctor", se)
 
     def test_bad_claude_dir_is_a_clear_error(self):
         rc, so, se = cli("session", "--latest", "--claude-dir", "/nonexistent/dir")
@@ -164,3 +165,17 @@ class TestDefaultTz(unittest.TestCase):
             with self.assertRaises(ReceiptError) as e:
                 _tz("Not/AZone")  # from --tz: no source named
         self.assertNotIn("(from", str(e.exception))
+
+    def test_windows_without_tzdata_points_at_doctor(self):
+        from types import SimpleNamespace as NS
+        from unittest import mock
+        from session_receipt import cli
+        for spec, want in ((None, True), (object(), False)):
+            with self.subTest(tzdata_installed=spec is not None), \
+                    mock.patch.object(cli, "os", NS(name="nt", environ={})), \
+                    mock.patch.object(cli, "importlib", NS(util=NS(find_spec=lambda name, s=spec: s))):
+                with self.assertRaises(cli.ReceiptError) as e:
+                    cli._tz("Not/AZone")
+            msg = str(e.exception)
+            self.assertEqual("install tzdata (session-receipt doctor prints the command)" in msg, want, msg)
+            self.assertIn("use an IANA name such as America/Chicago", msg)

@@ -10,12 +10,17 @@ Contract (see README "Automatic receipts"):
 - Never calls a model and never starts Claude Code, so it cannot trigger a turn.
   SESSION_RECEIPT_IN_HOOK guards against nested runs.
 - The child waits until the transcript file stops changing (incomplete-write guard),
-  then runs `session-receipt session --id <id>`. If the transcript is missing or still
+  then runs `session-receipt session --id <id>` with the bundled CLI (or SESSION_RECEIPT_CMD). If the transcript is missing or still
   changing after MAX_WAIT_S, it writes no receipt and logs why. Output and errors go to
   the data dir.
 """
-import json, os, shutil, subprocess, sys, time
+import json, os, subprocess, sys, time
 
+# The plugin root holds the session_receipt package. BUNDLED runs its CLI from there: it puts ROOT
+# first on sys.path in place of the working directory, so a file in the user's project cannot
+# shadow a module.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BUNDLED = "import sys; sys.path[0] = sys.argv.pop(1); from session_receipt.cli import main; sys.exit(main())"
 STABLE_S = float(os.environ.get("SESSION_RECEIPT_STABLE_S", "2"))
 MAX_WAIT_S = float(os.environ.get("SESSION_RECEIPT_MAX_WAIT_S", "30"))
 
@@ -49,12 +54,12 @@ def cli_cmd():
     - the whole value in double quotes: one executable path, used as is, no arguments
     - one word: an executable name or path without spaces
     - several words, the first not an absolute path: split on whitespace (python3 /opt/sr/cli.py)
-    Unset: `session-receipt` on PATH. Raises ValueError for anything else, including an absolute
-    path followed by more words, which could be a path with spaces (use a JSON array)."""
+    Unset: the CLI bundled with this hook, run by this same Python. Raises ValueError for anything
+    else, including an absolute path followed by more words, which could be a path with spaces (use
+    a JSON array)."""
     cmd = os.environ.get("SESSION_RECEIPT_CMD", "").strip()
     if not cmd:
-        exe = shutil.which("session-receipt")
-        return [exe] if exe else None
+        return [sys.executable, "-c", BUNDLED, ROOT]
     if cmd.startswith("["):
         try:
             argv = json.loads(cmd)
@@ -124,9 +129,6 @@ def worker(event):
         stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
         if cmd_error:
             fh.write(f"{stamp} {cmd_error}; skipped\n")
-            return 3
-        if not cmd:
-            fh.write(f"{stamp} session-receipt not found on PATH and SESSION_RECEIPT_CMD unset; skipped\n")
             return 3
         if not sid or not all(c.isalnum() or c == "-" for c in sid):
             fh.write(f"{stamp} missing or unexpected session_id; skipped\n")

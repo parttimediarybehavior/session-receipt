@@ -2,7 +2,7 @@
 import importlib.util, json, os, shutil, subprocess, sys, tempfile, threading, time, unittest, venv
 from unittest import mock
 
-HOOK = os.path.join(os.path.dirname(__file__), "..", "session-receipt", "hooks-handlers", "session_end.py")
+HOOK = os.path.join(os.path.dirname(__file__), "..", "hooks-handlers", "session_end.py")
 SID = "11111111-1111-4111-8111-111111111111"
 
 _spec = importlib.util.spec_from_file_location("session_end", HOOK)
@@ -228,10 +228,15 @@ class CliCmdParsing(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.parse(value)
 
-    def test_unset_uses_path(self):
-        with mock.patch.dict(os.environ, {}, clear=True), \
-                mock.patch.object(session_end.shutil, "which", return_value="/x/session-receipt"):
-            self.assertEqual(session_end.cli_cmd(), ["/x/session-receipt"])
+    def test_unset_uses_the_bundled_cli(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            argv = session_end.cli_cmd()
+        self.assertEqual(argv, [sys.executable, "-c", session_end.BUNDLED, session_end.ROOT])
+        out = tempfile.mkdtemp()
+        r = subprocess.run(argv + ["demo", "--out", "demo", "--now", "2026-01-06T12:00:00Z"], cwd=out,
+                           capture_output=True, text=True, timeout=120)  # from another folder
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(out, "demo", "demo-simple.svg")))
 
 
 class SpacedCommandLaunch(HookFixture):
@@ -311,7 +316,7 @@ class SpacedCommandLaunch(HookFixture):
         self.assertIn("could not start %r" % missing, self.log())
 
 
-PLUGIN = os.path.join(os.path.dirname(__file__), "..", "session-receipt")
+PLUGIN = os.path.join(os.path.dirname(__file__), "..")
 NODE = shutil.which("node")
 
 
@@ -332,8 +337,9 @@ class HooksJsonCommand(unittest.TestCase):
 @unittest.skipUnless(NODE, "needs node")
 @unittest.skipIf(os.name == "nt", "the fake interpreters are shell scripts; HookLauncherRealPython covers Windows")
 class HookInterpreterChoice(unittest.TestCase):
-    """run_hook.js starts the first of python3, python, `py -3` that is Python 3. Fake interpreters on
-    an otherwise empty PATH record what ran; a stub (like the WindowsApps one) fails every call."""
+    """run_hook.js starts the first of python3, python, `py -3` that is Python 3.10 or later. Fake
+    interpreters on an otherwise empty PATH record what ran; a stub (like the WindowsApps one) fails
+    every call."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -394,7 +400,7 @@ class HookInterpreterChoice(unittest.TestCase):
         r, ran = self.run_command()
         self.assertIsNone(ran)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("no Python 3 found", r.stderr)
+        self.assertIn("no Python 3.10 or later found", r.stderr)
 
 
 @unittest.skipUnless(NODE, "needs node")
@@ -416,8 +422,9 @@ class HookLauncherRealPython(HookFixture):
     def test_no_python_says_so(self):
         r = self.run_launcher([tempfile.mkdtemp()])
         self.assertEqual(r.returncode, 1)
-        self.assertIn("no Python 3 found", r.stderr)
+        self.assertIn("no Python 3.10 or later found", r.stderr)
         self.assertEqual(self.calls_made(), [])
+
 
 if os.name == "nt":
     import ctypes

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs the Session Receipt CLI from this checkout or plugin, with no pip install. Claude Code puts
+# a plugin's bin/ on the Bash tool's PATH. It uses the first of python3, python and `py -3` that is
+# Python 3.10 or later, and puts the checkout first on sys.path in place of the working directory,
+# so a file in the current folder cannot shadow a module.
+case $0 in */*) bin=${0%/*} ;; *) bin=. ;; esac  # no dirname: it may not be on PATH
+root=$(cd "$bin/.." && pwd)
+for p in python3 python 'py -3'; do
+  if $p -c 'import sys; sys.exit(sys.version_info < (3, 10))' </dev/null >/dev/null 2>&1; then
+    exec $p -c 'import sys; sys.path[0] = sys.argv.pop(1); sys.argv[0] = "session-receipt"; from session_receipt.cli import main; sys.exit(main())' "$root" "$@"
+  fi
+done
+echo "session-receipt: needs Python 3.10 or later (tried python3, python, py -3). Install it from https://www.python.org/downloads/ and try again." >&2
+exit 1

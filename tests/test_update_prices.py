@@ -56,6 +56,14 @@ class TestUpdatePrices(unittest.TestCase):
         self.assertEqual(res["status"], "ok")
         self.assertAlmostEqual(res["effective"]["cache_read"], 0.20, places=9)
 
+    def test_published_files_use_lf(self):  # on Windows too: text mode would write CRLF
+        d, ref, ovr, notes = self.run_update(openrouter(sonnet_read="0.0000002"))
+        for n in FILES:
+            with open(os.path.join(d, n), "rb") as f:
+                data = f.read()
+            self.assertNotIn(b"\r", data, n)
+            self.assertTrue(data.endswith(b"}\n"), n)
+
     def test_tiered_model_is_never_flattened(self):
         d, ref, ovr, notes = self.run_update(openrouter(haiku_prompt="0.0000002"))
         self.assertNotIn("claude-haiku-5-5", ovr)
